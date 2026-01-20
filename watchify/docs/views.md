@@ -39,7 +39,10 @@ WatchifyApp
 │               │   └── ProductGrid
 │               │       └── ProductCard (per product)
 │               ├── ProductDetailView
-│               │   └── PriceHistoryChart
+│               │   ├── VariantRow
+│               │   └── PriceHistorySection
+│               │       ├── PriceHistoryChart
+│               │       └── PriceHistoryRow
 │               └── ActivityView
 │                   └── ChangeEventRow (per event)
 ├── MenuBarExtra
@@ -94,7 +97,10 @@ struct ProductCard: View {
                     PriceChangeIndicator(change: change)
                 }
                 Spacer()
-                StockBadge(isAvailable: product.isAvailable)
+                Badge(
+                    text: product.isAvailable ? "In Stock" : "Out",
+                    color: product.isAvailable ? .green : .red
+                )
             }
         }
         .padding()
@@ -205,10 +211,9 @@ struct MenuBarView: View {
 | `OverviewView` | Grid of store cards with adaptive layout |
 | `StoreCard` | Overview card showing name, product count, preview images, event badges |
 | `ProductCard` | Grid card for a product |
-| `PriceChangeIndicator` | Arrow + percentage badge |
-| `StockBadge` | "In Stock" / "Out of Stock" pill |
+| `PriceChangeIndicator` | Arrow + amount showing price change (↓$15 green, ↑$10 red) |
+| `Badge` | Reusable capsule badge with optional icon (stock status, event counts, etc.) |
 | `ActivityRow` | Activity feed row |
-| `EventBadge` | Compact badge showing event count |
 | `GlassCard` | Reusable glass wrapper |
 
 ## ChangeType Icons & Colors
@@ -224,7 +229,7 @@ Standardized via `ChangeType.icon` and `ChangeType.color` (see [data-model.md](d
 | `newProduct` | `bag.badge.plus` | purple | Discovery, something new |
 | `productRemoved` | `bag.badge.minus` | secondary | Neutral, just informational |
 
-Used by `ActivityRow` and `StoreCard.EventBadge` for consistency.
+Used by `ActivityRow`, `StoreCard`, and `ProductCard` via the shared `Badge` component.
 
 ## Liquid Glass Usage
 
@@ -249,7 +254,10 @@ Views/
 │   └── ProductGrid.swift
 ├── Product/
 │   ├── ProductDetailView.swift
+│   ├── VariantRow.swift
+│   ├── PriceHistorySection.swift
 │   ├── PriceHistoryChart.swift
+│   ├── PriceHistoryRow.swift
 │   └── PriceChangeIndicator.swift
 ├── Activity/
 │   ├── ActivityView.swift
@@ -259,7 +267,7 @@ Views/
 ├── MenuBar/
 │   └── MenuBarView.swift
 └── Components/
+    ├── Badge.swift
     ├── GlassCard.swift
-    ├── StockBadge.swift
     └── EmptyStateView.swift
 ```

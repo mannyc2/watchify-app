@@ -15,6 +15,7 @@ final class ChangeEvent {
     var variantTitle: String?
     var oldValue: String?
     var newValue: String?
+    var priceChange: Decimal?
     var isRead: Bool
     var magnitude: ChangeMagnitude
 
@@ -26,6 +27,7 @@ final class ChangeEvent {
         variantTitle: String? = nil,
         oldValue: String? = nil,
         newValue: String? = nil,
+        priceChange: Decimal? = nil,
         magnitude: ChangeMagnitude = .medium,
         store: Store? = nil
     ) {
@@ -36,6 +38,7 @@ final class ChangeEvent {
         self.variantTitle = variantTitle
         self.oldValue = oldValue
         self.newValue = newValue
+        self.priceChange = priceChange
         self.isRead = false
         self.magnitude = magnitude
         self.store = store
@@ -49,6 +52,7 @@ enum ChangeType: String, Codable {
     case outOfStock
     case newProduct
     case productRemoved
+    case imagesChanged
 }
 
 enum ChangeMagnitude: String, Codable {
@@ -66,6 +70,7 @@ extension ChangeType {
         case .backInStock, .outOfStock: "shippingbox.fill"
         case .newProduct: "bag.badge.plus"
         case .productRemoved: "bag.badge.minus"
+        case .imagesChanged: "photo.on.rectangle"
         }
     }
 
@@ -77,6 +82,7 @@ extension ChangeType {
         case .outOfStock: .orange
         case .newProduct: .purple
         case .productRemoved: .secondary
+        case .imagesChanged: .blue
         }
     }
 }

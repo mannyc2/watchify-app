@@ -518,79 +518,110 @@ Stores
 
 ---
 
-## Iteration 20: Product Grid
+## Iteration 20: Product Grid ✅
 
 **Goal**: Better product display.
 
-- [ ] Replace List with `LazyVGrid`
-- [ ] Create `ProductCard.swift`
-- [ ] Show image (AsyncImage), title, price
-- [ ] Basic styling
+- [x] Replace List with `LazyVGrid`
+- [x] Create `ProductCard.swift`
+- [x] Show image (AsyncImage), title, price
+- [x] Basic styling (material, border, shadow, contentShape, accessibility)
 
 **Test**: Products display in grid, images load.
 
 ---
 
-## Iteration 21: Stock Badge
+## Iteration 21: Stock Badge ✅
 
 **Goal**: See availability at a glance.
 
-- [ ] Create `StockBadge.swift`
-- [ ] Green "In Stock" / Red "Out of Stock"
-- [ ] Add to ProductCard
+- [x] Green "In Stock" / Red "Out of Stock" - implemented inline in `ProductRow`
+- [x] Created shared `Badge` component in `Views/Badge.swift`
+- [x] Consolidated `StockBadge` and `EventBadge` into single `Badge(text:icon:color:)`
+- [x] Updated `ProductCard` and `StoreCard` to use shared `Badge`
 
-**Test**: Mix of in/out of stock products shows correctly.
+**Test**: Mix of in/out of stock products shows correctly. ✅
 
 ---
 
-## Iteration 22: Price Change Indicator
+## Iteration 22: Price Change Indicator ✅
 
 **Goal**: See recent changes on cards.
 
-- [ ] Create `PriceChangeIndicator.swift`
-- [ ] Compare current price to last snapshot
-- [ ] Show ↓ green for drop, ↑ red for increase
-- [ ] Add to ProductCard
+- [x] Create `PriceChangeIndicator.swift` - shows ↑/↓ arrow with amount
+- [x] Add `Product.recentPriceChange` computed property (compares to last snapshot)
+- [x] Colors standardized: use `ChangeType.priceDropped.color` (green) and `ChangeType.priceIncreased.color` (red)
+- [x] Show ↓ green for drop, ↑ red for increase
+- [x] Add to ProductCard
+- [x] Add `priceChange: Decimal?` field to `ChangeEvent` model
+- [x] Update `StoreService` to populate `priceChange` when creating events
+- [x] Update `ActivityRow` to use `PriceChangeIndicator` (shows "$21.98 ↓$0.01")
 
-**Test**: Product with price change shows indicator.
-
----
-
-## Iteration 23: Product Detail View
-
-**Goal**: See full product info.
-
-- [ ] Create `ProductDetailView.swift`
-- [ ] Show all variants with prices
-- [ ] Show product metadata
-- [ ] Navigate from ProductCard tap
-
-**Test**: Tap product, see detail.
+**Test**: Product with price change shows indicator. Activity shows new format for new events. ✅
 
 ---
 
-## Iteration 24: Price History (List)
+## Iteration 23: Product Detail View ✅
 
-**Goal**: See historical prices.
+**Goal**: See full product info and all variants.
 
-- [ ] In ProductDetailView, list variant snapshots
-- [ ] Show date + price for each
-- [ ] Sorted by date
+- [x] Create `ProductDetailView.swift` - hero image, metadata (title/vendor/type), variants list
+- [x] Create `VariantRow.swift` - title, price, compareAtPrice strikethrough, savings badge, stock badge, SKU
+- [x] Image carousel with thumbnail strip for multi-image products
+- [x] Wrap `ProductCard` in `NavigationLink(value: product)`
+- [x] Add `.navigationDestination(for: Product.self)` in `StoreDetailView`
+- [x] Wrap `StoreDetailView` in `NavigationStack` in `ContentView`
+- [x] Toolbar: ShareLink + Open in Browser button
+- [x] Created `ProductImage` model for multiple images (to be simplified in 23a)
+- [x] Updated `StoreService` to sync all images
+- [x] 6 preview states (single/multi image, compareAtPrice, mixed stock, no image, long text)
 
-**Test**: Product with history shows past prices.
+**Test**: Tap product → detail view with image carousel, variants sorted, toolbar actions work. ✅
 
 ---
 
-## Iteration 25: Price History (Chart)
+## Iteration 23a: Simplify ProductImage → imageURLs Array ✅
 
-**Goal**: Visualize price over time.
+**Goal**: Replace separate `ProductImage` model with simple `[String]` array on Product.
 
-- [ ] Create `PriceHistoryChart.swift`
-- [ ] Use Swift Charts `LineMark`
-- [ ] Add to ProductDetailView
-- [ ] Handle empty state
+- [x] Replace `images: [ProductImage]` relationship with `imageURLs: [String]`
+- [x] Add `primaryImageURL` and `allImageURLs` computed properties
+- [x] Delete `Models/ProductImage.swift`
+- [x] Add `.imagesChanged` case to `ChangeType` enum
+- [x] Update `StoreService` to use simple array assignment
+- [x] Add image count change detection in `detectChanges()`
+- [x] Update views and previews to use new properties
 
-**Test**: Chart renders with real data.
+**Test**: Images display in carousel, image count changes trigger events.
+
+---
+
+## Iteration 24 & 25: Price History (List + Chart) ✅
+
+**Goal**: See historical prices as list and chart.
+
+- [x] Create `PriceHistoryChart.swift` with Swift Charts `LineMark`
+- [x] Create `PriceHistoryRow.swift` for list items with change indicators
+- [x] Create `PriceHistorySection.swift` combining chart and list
+- [x] Add price history section to `ProductDetailView`
+- [x] Handle empty state when no snapshots exist
+
+**Test**: Chart and list render with real snapshot data.
+
+---
+
+## Iteration 25a: Price History & Variants Styling ✅
+
+**Goal**: Visual consistency between price history and product sections.
+
+- [x] Constrain `priceHistorySection` to `maxWidth: 1200` + centered
+- [x] Remove gray material wrapper; give chart and table individual bordered containers
+- [x] Style variants table with alternating rows + border (matches price history)
+- [x] Center empty state with generous height
+- [x] Chart uses `accentColor`, tertiary grid lines
+- [x] Add design decision comments to code
+
+**Test**: Price history aligns with product section, consistent table styling. ✅
 
 ---
 
@@ -700,6 +731,27 @@ Stores
 - [ ] Use `@Query` with dynamic predicate or filter in view
 
 **Test**: Type query, products filter.
+
+---
+
+## Iteration 34a: Product Filters
+
+**Goal**: Filter products by attributes.
+
+- [ ] Add filter bar below search (or combined with search)
+- [ ] Stock filter: All / In Stock / Out of Stock
+- [ ] Sort picker: Name (A-Z) / Price (Low-High) / Price (High-Low) / Recently Added
+- [ ] Price range filter (optional): Min/Max price inputs or preset ranges
+- [ ] Clear filters button when filters active
+- [ ] Persist filter state per store (or reset on navigation)
+
+**Implementation Notes**:
+- Follow pattern from `ActivityView` filter bar
+- Use `Picker` with `.segmented` style for stock filter
+- Use `Menu` for sort options
+- Filter in view via computed property (simpler than dynamic `@Query`)
+
+**Test**: Filter by stock status, sort by price, filters persist during session.
 
 ---
 

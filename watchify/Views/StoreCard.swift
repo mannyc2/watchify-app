@@ -69,17 +69,25 @@ struct StoreCard: View {
                 // Badges for recent events (last 24h)
                 HStack(spacing: 6) {
                     if let drops = recentEvents[.priceDropped], drops > 0 {
-                        EventBadge(
+                        Badge(
+                            text: "\(drops)",
                             icon: ChangeType.priceDropped.icon,
-                            count: drops,
                             color: ChangeType.priceDropped.color
                         )
                     }
                     if let stock = recentEvents[.backInStock], stock > 0 {
-                        EventBadge(icon: ChangeType.backInStock.icon, count: stock, color: ChangeType.backInStock.color)
+                        Badge(
+                            text: "\(stock)",
+                            icon: ChangeType.backInStock.icon,
+                            color: ChangeType.backInStock.color
+                        )
                     }
                     if let new = recentEvents[.newProduct], new > 0 {
-                        EventBadge(icon: ChangeType.newProduct.icon, count: new, color: ChangeType.newProduct.color)
+                        Badge(
+                            text: "\(new)",
+                            icon: ChangeType.newProduct.icon,
+                            color: ChangeType.newProduct.color
+                        )
                     }
                 }
             }
@@ -93,26 +101,6 @@ struct StoreCard: View {
         }
         .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
         .contentShape(RoundedRectangle(cornerRadius: 16))
-    }
-}
-
-private struct EventBadge: View {
-    let icon: String
-    let count: Int
-    let color: Color
-
-    var body: some View {
-        HStack(spacing: 3) {
-            Image(systemName: icon)
-                .font(.caption2)
-            Text("\(count)")
-                .font(.caption.weight(.semibold))
-                .monospacedDigit()
-        }
-        .foregroundStyle(color)
-        .padding(.horizontal, 6)
-        .padding(.vertical, 3)
-        .background(color.opacity(0.15), in: Capsule())
     }
 }
 
@@ -140,14 +128,14 @@ private struct EventBadge: View {
         ("Wool Loungers", "https://cdn.shopify.com/s/files/1/1104/4168/products/Wool_Lounger_Natural_Grey.png")
     ]
 
-    for (index, (title, imageURL)) in products.enumerated() {
+    for (index, (title, imageURLString)) in products.enumerated() {
         let product = Product(
             shopifyId: Int64(index + 1),
             handle: title.lowercased().replacingOccurrences(of: " ", with: "-"),
-            title: title,
-            imageURL: URL(string: imageURL)
+            title: title
         )
         product.store = store
+        product.imageURLs = [imageURLString]
         container.mainContext.insert(product)
     }
 
@@ -178,6 +166,7 @@ private struct EventBadge: View {
             productTitle: "Product \(idx + 1)",
             oldValue: "$100",
             newValue: "$80",
+            priceChange: -20,
             store: store
         )
         container.mainContext.insert(event)

@@ -5,10 +5,9 @@ SwiftData schema for Watchify.
 ## Entity Relationship
 
 ```
-Store (1) ──── (*) Product (1) ──── (*) Variant
-  │                  │                    │
-  │                  │                    │
-  └── (*) ChangeEvent    ProductSnapshot     VariantSnapshot
+Store (1) ──── (*) Product (1) ──── (*) Variant (1) ──── (*) VariantSnapshot
+  │
+  └── (*) ChangeEvent
 ```
 
 ## Models
@@ -47,19 +46,24 @@ class Product {
     var title: String
     var vendor: String?
     var productType: String?
-    var createdAt: Date?
     var firstSeenAt: Date
     var lastSeenAt: Date
     var isRemoved: Bool
-    var imageURL: URL?
-    
+    var imageURLs: [String] = []  // Ordered array of CDN URLs
+
     var store: Store?
-    
+
     @Relationship(deleteRule: .cascade, inverse: \Variant.product)
     var variants: [Variant]
-    
-    @Relationship(deleteRule: .cascade, inverse: \ProductSnapshot.product)
-    var snapshots: [ProductSnapshot]
+
+    // Convenience
+    var primaryImageURL: URL? {
+        imageURLs.first.flatMap { URL(string: $0) }
+    }
+
+    var allImageURLs: [URL] {
+        imageURLs.compactMap { URL(string: $0) }
+    }
 }
 ```
 
@@ -95,20 +99,11 @@ class Variant {
 }
 ```
 
-### Snapshots
+### VariantSnapshot
 
-Point-in-time captures for history tracking.
+Point-in-time captures for price/availability history tracking.
 
 ```swift
-@Model
-class ProductSnapshot {
-    var capturedAt: Date
-    var title: String
-    var vendor: String?
-    var productType: String?
-    var product: Product?
-}
-
 @Model
 class VariantSnapshot {
     var capturedAt: Date
@@ -145,6 +140,7 @@ enum ChangeType: String, Codable {
     case outOfStock
     case newProduct
     case productRemoved
+    case imagesChanged
 }
 
 extension ChangeType {
@@ -154,6 +150,7 @@ extension ChangeType {
         case .backInStock, .outOfStock: "shippingbox.fill"
         case .newProduct: "bag.badge.plus"
         case .productRemoved: "bag.badge.minus"
+        case .imagesChanged: "photo.on.rectangle"
         }
     }
 
@@ -165,6 +162,7 @@ extension ChangeType {
         case .outOfStock: .orange
         case .newProduct: .purple
         case .productRemoved: .secondary
+        case .imagesChanged: .blue
         }
     }
 }
@@ -213,6 +211,6 @@ Default: 90 days. Cleanup runs during sync:
 ```swift
 func cleanupOldSnapshots(context: ModelContext) {
     let cutoff = Calendar.current.date(byAdding: .day, value: -90, to: Date())!
-    // Delete ProductSnapshot and VariantSnapshot older than cutoff
+    // Delete VariantSnapshot older than cutoff
 }
 ```

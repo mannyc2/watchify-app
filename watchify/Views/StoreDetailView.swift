@@ -33,19 +33,6 @@ struct StoreDetailView: View {
         )
     }
 
-    // MARK: - Known Issue: NSTableView Reentrancy Warning
-    //
-    // When navigating to this view, macOS may log:
-    //   "WARNING: Application performed a reentrant operation in its NSTableView delegate"
-    //
-    // Root cause: SwiftUI's List uses NSOutlineView internally. During initial setup,
-    // OutlineListCoordinator.configTableView() calls setDataSource:, which triggers
-    // reloadData → _tileAndRedisplayAll → setFrameSize: → tile() while reloadData
-    // is still on the call stack. This is an internal SwiftUI/AppKit issue.
-    //
-    // The warning is cosmetic and doesn't affect functionality. Apple may fix this
-    // in a future SwiftUI update.
-
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -76,8 +63,16 @@ struct StoreDetailView: View {
                         .disabled(isSyncing)
                     }
                 } else {
-                    List(products) { product in
-                        ProductRow(product: product)
+                    ScrollView {
+                        LazyVGrid(
+                            columns: [GridItem(.adaptive(minimum: 160, maximum: 200))],
+                            spacing: 12
+                        ) {
+                            ForEach(products) { product in
+                                ProductCard(product: product)
+                            }
+                        }
+                        .padding()
                     }
                 }
             }
@@ -88,6 +83,9 @@ struct StoreDetailView: View {
             if let error = otherError {
                 Text(error.localizedDescription)
             }
+        }
+        .navigationDestination(for: Product.self) { product in
+            ProductDetailView(product: product)
         }
     }
 
@@ -188,7 +186,10 @@ struct ProductRow: View {
 #Preview("Empty Products") {
     StoreDetailView(store: Store(name: "Test Store", domain: "test.myshopify.com"))
         .environment(SyncScheduler.shared)
-        .modelContainer(for: [Store.self, Product.self, Variant.self, VariantSnapshot.self], inMemory: true)
+        .modelContainer(
+            for: [Store.self, Product.self, Variant.self, VariantSnapshot.self, ChangeEvent.self],
+            inMemory: true
+        )
 }
 
 #Preview("With Products") {
@@ -197,30 +198,32 @@ struct ProductRow: View {
     store.lastFetchedAt = Date().addingTimeInterval(-3600)
     container.mainContext.insert(store)
 
-    let productData = [
-        ("Wool Runners", Decimal(110), true),
-        ("Tree Dashers", Decimal(125), true),
-        ("Wool Loungers", Decimal(95), false),
-        ("Tree Breezers", Decimal(100), true)
-    ]
+    let imageBase = "https://cdn.shopify.com/s/files/1/1104/4168/products"
+    let titles = ["Wool Runners", "Tree Dashers", "Wool Loungers", "Tree Breezers"]
+    let prices: [Decimal] = [110, 125, 95, 100]
+    let availability = [true, true, false, true]
+    let images = ["Wool_Runner.png", "Tree_Dasher.png", nil, "Tree_Breezer.png"]
 
-    for (idx, (title, price, available)) in productData.enumerated() {
+    for idx in titles.indices {
         let product = Product(
             shopifyId: Int64(idx + 1),
-            handle: title.lowercased().replacingOccurrences(of: " ", with: "-"),
-            title: title
+            handle: titles[idx].lowercased().replacingOccurrences(of: " ", with: "-"),
+            title: titles[idx]
         )
         product.store = store
+        if let imageName = images[idx] {
+            product.imageURLs = ["\(imageBase)/\(imageName)"]
+        }
+        container.mainContext.insert(product)
 
         let variant = Variant(
             shopifyId: Int64(idx + 100),
             title: "Default",
-            price: price,
-            available: available,
+            price: prices[idx],
+            available: availability[idx],
             position: 0
         )
         variant.product = product
-        container.mainContext.insert(product)
         container.mainContext.insert(variant)
     }
 

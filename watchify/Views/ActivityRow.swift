@@ -28,7 +28,14 @@ struct ActivityRow: View {
                         .lineLimit(1)
                 }
 
-                if let description = changeDescription {
+                if let priceChange = event.priceChange, let newValue = event.newValue {
+                    HStack(spacing: 4) {
+                        Text(newValue)
+                            .foregroundStyle(.secondary)
+                        PriceChangeIndicator(change: priceChange)
+                    }
+                    .font(.caption)
+                } else if let description = changeDescription {
                     Text(description)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -58,6 +65,8 @@ struct ActivityRow: View {
             "New product"
         case .productRemoved:
             "Product removed"
+        case .imagesChanged:
+            "Images changed"
         }
     }
 
@@ -77,7 +86,8 @@ struct ActivityRow: View {
         productTitle: "Wool Runners",
         variantTitle: "Size 10 / Natural White",
         oldValue: "$110",
-        newValue: "$89"
+        newValue: "$89",
+        priceChange: -21
     ))
     .padding()
 }
@@ -88,7 +98,8 @@ struct ActivityRow: View {
         productTitle: "Tree Dashers",
         variantTitle: "Size 9",
         oldValue: "$125",
-        newValue: "$135"
+        newValue: "$135",
+        priceChange: 10
     ))
     .padding()
 }

@@ -27,7 +27,9 @@ struct ContentView: View {
                 ActivityView()
             case .store(let id):
                 if let store = stores.first(where: { $0.id == id }) {
-                    StoreDetailView(store: store)
+                    NavigationStack {
+                        StoreDetailView(store: store)
+                    }
                 } else {
                     ContentUnavailableView(
                         "Store Not Found",

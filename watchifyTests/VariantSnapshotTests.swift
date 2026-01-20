@@ -21,16 +21,10 @@ struct VariantSnapshotTests {
         let service: StoreService
 
         init() throws {
-            let schema = Schema([
-                Store.self,
-                Product.self,
-                Variant.self,
-                VariantSnapshot.self,
-                ChangeEvent.self
-            ])
+            let schema = Schema([Store.self, Product.self, Variant.self, VariantSnapshot.self, ChangeEvent.self])
             let config = ModelConfiguration(isStoredInMemoryOnly: true)
             self.container = try ModelContainer(for: schema, configurations: config)
-            self.context = container.mainContext  // Use mainContext to see actor's saved changes
+            self.context = container.mainContext
             self.mockAPI = MockShopifyAPI()
             self.service = StoreService(api: mockAPI)
         }
@@ -44,22 +38,10 @@ struct VariantSnapshotTests {
             return try await service.addStore(name: name, domain: domain, context: context)
         }
 
-        /// Prepares a store for sync testing by clearing rate limit.
         func clearRateLimit(for store: Store) {
             store.lastFetchedAt = Date.distantPast
         }
 
-        /// Fetches fresh store from context after sync (separate context saves don't auto-update objects)
-        func freshStore(_ store: Store) throws -> Store {
-            let storeId = store.id
-            let descriptor = FetchDescriptor<Store>(predicate: #Predicate { $0.id == storeId })
-            guard let fresh = try context.fetch(descriptor).first else {
-                throw SyncError.storeNotFound
-            }
-            return fresh
-        }
-
-        /// Fetches fresh variant from context after sync
         func freshVariant(_ variant: Variant) throws -> Variant {
             let variantId = variant.shopifyId
             let descriptor = FetchDescriptor<Variant>(predicate: #Predicate { $0.shopifyId == variantId })
@@ -68,9 +50,22 @@ struct VariantSnapshotTests {
             }
             return fresh
         }
+
+        /// Sets up a store with initial product and syncs with updated product
+        func setupAndSync(
+            initial: ShopifyProduct,
+            updated: ShopifyProduct
+        ) async throws -> (store: Store, variant: Variant) {
+            let store = try await addStore(products: [initial])
+            let variant = store.products.first!.variants.first!
+            await mockAPI.setProducts([updated])
+            clearRateLimit(for: store)
+            try await service.syncStore(store, context: context)
+            return (store, try freshVariant(variant))
+        }
     }
 
-    // MARK: - Helper to create variants
+    // MARK: - Test Variant Factory
 
     private func makeVariant(
         id: Int64 = 100,
@@ -98,38 +93,30 @@ struct VariantSnapshotTests {
     func syncCreatesSnapshotOnPriceChange() async throws {
         let ctx = try TestContext()
 
-        // Initial setup: add a store with a product at price $50
-        let product = ShopifyProduct.mock(
+        let initial = ShopifyProduct.mock(
             id: 1,
             title: "Sneakers",
             variants: [makeVariant(id: 100, title: "Size 10", sku: "SNK-10", price: 50)]
         )
-        let store = try await ctx.addStore(products: [product])
-
-        // Get the variant
-        let variant = store.products.first!.variants.first!
-        #expect(variant.snapshots.isEmpty, "No snapshots should exist initially")
-
-        // Sync with updated price: $50 → $45
-        let updatedProduct = ShopifyProduct.mock(
+        let updated = ShopifyProduct.mock(
             id: 1,
             title: "Sneakers",
             variants: [makeVariant(id: 100, title: "Size 10", sku: "SNK-10", price: 45)]
         )
-        await ctx.mockAPI.setProducts([updatedProduct])
+
+        let store = try await ctx.addStore(products: [initial])
+        let variant = store.products.first!.variants.first!
+        #expect(variant.snapshots.isEmpty, "No snapshots should exist initially")
+
+        await ctx.mockAPI.setProducts([updated])
         ctx.clearRateLimit(for: store)
         try await ctx.service.syncStore(store, context: ctx.context)
 
-        // Fetch fresh variant after sync (separate context)
         let freshVariant = try ctx.freshVariant(variant)
-
-        // Verify snapshot was created with old price
         #expect(freshVariant.snapshots.count == 1, "One snapshot should be created")
         let snapshot = try #require(freshVariant.snapshots.first)
         #expect(snapshot.price == 50, "Snapshot should contain old price")
         #expect(snapshot.available == true, "Snapshot should contain old availability")
-
-        // Verify current variant has new price
         #expect(freshVariant.price == 45, "Variant should have new price")
     }
 
@@ -138,7 +125,6 @@ struct VariantSnapshotTests {
     func multipleChangesCreateMultipleSnapshots() async throws {
         let ctx = try TestContext()
 
-        // Initial: $100
         let product1 = ShopifyProduct.mock(
             id: 1,
             title: "Laptop",
@@ -171,11 +157,8 @@ struct VariantSnapshotTests {
         ctx.clearRateLimit(for: store)
         try await ctx.service.syncStore(store, context: ctx.context)
 
-        // Fetch fresh variant and verify two snapshots exist
         variant = try ctx.freshVariant(variant)
         #expect(variant.snapshots.count == 2, "Two snapshots after two changes")
-
-        // Verify price history is correct
         let history = variant.priceHistory
         #expect(history[0].price == 100, "First snapshot should be $100")
         #expect(history[1].price == 90, "Second snapshot should be $90")
@@ -187,26 +170,19 @@ struct VariantSnapshotTests {
     func snapshotIncludesCompareAtPriceChanges() async throws {
         let ctx = try TestContext()
 
-        // Initial: sale price $80, compare at $100
-        let product1 = ShopifyProduct.mock(
+        let initial = ShopifyProduct.mock(
             id: 1,
             title: "Shoes",
             variants: [makeVariant(id: 100, title: "Size 9", sku: "SH-9", price: 80, compareAtPrice: 100)]
         )
-        let store = try await ctx.addStore(products: [product1])
-        let variant = store.products.first!.variants.first!
-
-        // Change compareAtPrice: $100 → $120
-        let product2 = ShopifyProduct.mock(
+        let updated = ShopifyProduct.mock(
             id: 1,
             title: "Shoes",
             variants: [makeVariant(id: 100, title: "Size 9", sku: "SH-9", price: 80, compareAtPrice: 120)]
         )
-        await ctx.mockAPI.setProducts([product2])
-        ctx.clearRateLimit(for: store)
-        try await ctx.service.syncStore(store, context: ctx.context)
 
-        // Verify snapshot was created
+        let (_, variant) = try await ctx.setupAndSync(initial: initial, updated: updated)
+
         #expect(variant.snapshots.count == 1, "Snapshot created when compareAtPrice changes")
         let snapshot = try #require(variant.snapshots.first)
         #expect(snapshot.compareAtPrice == 100, "Snapshot should contain old compareAtPrice")
@@ -220,32 +196,23 @@ struct VariantSnapshotTests {
     func syncCreatesSnapshotOnAvailabilityChange() async throws {
         let ctx = try TestContext()
 
-        // Initial setup: product in stock
-        let product = ShopifyProduct.mock(
+        let initial = ShopifyProduct.mock(
             id: 1,
             title: "Widget",
             variants: [makeVariant(id: 100, price: 29.99, available: true)]
         )
-        let store = try await ctx.addStore(products: [product])
-        let variant = store.products.first!.variants.first!
-
-        // Sync with updated availability: true → false
-        let updatedProduct = ShopifyProduct.mock(
+        let updated = ShopifyProduct.mock(
             id: 1,
             title: "Widget",
             variants: [makeVariant(id: 100, price: 29.99, available: false)]
         )
-        await ctx.mockAPI.setProducts([updatedProduct])
-        ctx.clearRateLimit(for: store)
-        try await ctx.service.syncStore(store, context: ctx.context)
 
-        // Verify snapshot was created
+        let (_, variant) = try await ctx.setupAndSync(initial: initial, updated: updated)
+
         #expect(variant.snapshots.count == 1, "One snapshot should be created")
         let snapshot = try #require(variant.snapshots.first)
         #expect(snapshot.available == true, "Snapshot should contain old availability (true)")
         #expect(snapshot.price == 29.99, "Snapshot should contain price at time of change")
-
-        // Verify current variant has new availability
         #expect(variant.available == false, "Variant should be out of stock")
     }
 
@@ -256,21 +223,14 @@ struct VariantSnapshotTests {
     func noSnapshotWhenNoChange() async throws {
         let ctx = try TestContext()
 
-        // Initial setup
         let product = ShopifyProduct.mock(
             id: 1,
             title: "Book",
             variants: [makeVariant(id: 100, title: "Hardcover", sku: "BK-HC", price: 24.99)]
         )
-        let store = try await ctx.addStore(products: [product])
-        let variant = store.products.first!.variants.first!
 
-        // Sync with identical data
-        await ctx.mockAPI.setProducts([product])
-        ctx.clearRateLimit(for: store)
-        try await ctx.service.syncStore(store, context: ctx.context)
+        let (_, variant) = try await ctx.setupAndSync(initial: product, updated: product)
 
-        // Verify no snapshots were created
         #expect(variant.snapshots.isEmpty, "No snapshots when nothing changed")
     }
 
@@ -281,33 +241,21 @@ struct VariantSnapshotTests {
     func snapshotCascadeDeletes() async throws {
         let ctx = try TestContext()
 
-        // Setup: Create a product with a variant that has price changes
-        let product1 = ShopifyProduct.mock(
+        let initial = ShopifyProduct.mock(
             id: 1,
             title: "Monitor",
             variants: [makeVariant(id: 100, title: "27-inch", sku: "MON-27", price: 300)]
         )
-        let store = try await ctx.addStore(products: [product1])
-        let variant = store.products.first!.variants.first!
-
-        // Create a price change to generate a snapshot
-        let product2 = ShopifyProduct.mock(
+        let updated = ShopifyProduct.mock(
             id: 1,
             title: "Monitor",
             variants: [makeVariant(id: 100, title: "27-inch", sku: "MON-27", price: 250)]
         )
-        await ctx.mockAPI.setProducts([product2])
-        ctx.clearRateLimit(for: store)
-        try await ctx.service.syncStore(store, context: ctx.context)
 
-        // Fetch fresh variant after sync
-        let freshVariant = try ctx.freshVariant(variant)
-        #expect(freshVariant.snapshots.count == 1, "Snapshot should exist")
+        let (_, variant) = try await ctx.setupAndSync(initial: initial, updated: updated)
+        #expect(variant.snapshots.count == 1, "Snapshot should exist")
 
-        // Delete the variant
-        ctx.context.delete(freshVariant)
-
-        // Fetch all snapshots to verify cascade delete
+        ctx.context.delete(variant)
         let snapshots = try ctx.context.fetch(FetchDescriptor<VariantSnapshot>())
         #expect(snapshots.isEmpty, "Snapshots should be cascade deleted with variant")
     }
@@ -319,14 +267,13 @@ struct VariantSnapshotTests {
     func mostRecentSnapshotReturnsLatest() async throws {
         let ctx = try TestContext()
 
-        // Create a variant with multiple price changes
         let product1 = ShopifyProduct.mock(
             id: 1,
             title: "Gadget",
             variants: [makeVariant(id: 100, title: "v1", price: 100)]
         )
         let store = try await ctx.addStore(products: [product1])
-        let variant = store.products.first!.variants.first!
+        var variant = store.products.first!.variants.first!
 
         // First change
         let product2 = ShopifyProduct.mock(
@@ -338,7 +285,6 @@ struct VariantSnapshotTests {
         ctx.clearRateLimit(for: store)
         try await ctx.service.syncStore(store, context: ctx.context)
 
-        // Small delay to ensure distinct timestamps
         try await Task.sleep(for: .milliseconds(10))
 
         // Second change
@@ -351,9 +297,8 @@ struct VariantSnapshotTests {
         ctx.clearRateLimit(for: store)
         try await ctx.service.syncStore(store, context: ctx.context)
 
-        // Fetch fresh variant and verify mostRecentSnapshot returns the latest one
-        let freshVariant = try ctx.freshVariant(variant)
-        let mostRecent = try #require(freshVariant.mostRecentSnapshot)
+        variant = try ctx.freshVariant(variant)
+        let mostRecent = try #require(variant.mostRecentSnapshot)
         #expect(mostRecent.price == 90, "Most recent snapshot should be the $90 price point")
     }
 }

@@ -209,6 +209,7 @@ struct ActivityView: View {
         productTitle: "Test Product",
         oldValue: "$100",
         newValue: "$80",
+        priceChange: -20,
         store: store
     )
     event.occurredAt = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
@@ -233,6 +234,7 @@ struct ActivityView: View {
         variantTitle: "Size 10",
         oldValue: "$110",
         newValue: "$89",
+        priceChange: -21,
         store: store
     )
     container.mainContext.insert(event1)
@@ -250,6 +252,7 @@ struct ActivityView: View {
         productTitle: "Wool Loungers",
         oldValue: "$95",
         newValue: "$105",
+        priceChange: 10,
         store: store
     )
     event3.occurredAt = Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date()

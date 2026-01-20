@@ -35,13 +35,13 @@ struct SyncSchedulerTests {
     @Test("isSyncing is accessible")
     func isSyncingIsAccessible() async throws {
         // Just verify the property is readable (may be true or false depending on app state)
-        let _ = SyncScheduler.shared.isSyncing
+        _ = SyncScheduler.shared.isSyncing
     }
 
     @MainActor
     @Test("lastSyncAt is accessible")
     func lastSyncAtIsAccessible() async throws {
         // Just verify the property is readable
-        let _ = SyncScheduler.shared.lastSyncAt
+        _ = SyncScheduler.shared.lastSyncAt
     }
 }

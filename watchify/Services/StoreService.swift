@@ -98,49 +98,58 @@ final class StoreService {
             return []
         }
 
-        var changes: [ChangeEvent] = []
         let existingProducts = store.products
         let existingByShopifyId = Dictionary(uniqueKeysWithValues: existingProducts.map { ($0.shopifyId, $0) })
         let fetchedIds = Set(shopifyProducts.map { $0.id })
 
-        for shopifyProduct in shopifyProducts {
-            if let existing = existingByShopifyId[shopifyProduct.id] {
-                // Detect changes BEFORE updating
-                let productChanges = detectChanges(existing: existing, fetched: shopifyProduct, store: store)
-                changes.append(contentsOf: productChanges)
+        var changes = processFetchedProducts(
+            shopifyProducts,
+            existingByShopifyId: existingByShopifyId,
+            store: store,
+            context: context
+        )
+        changes += processRemovedProducts(existingProducts, fetchedIds: fetchedIds, store: store)
 
-                updateProduct(existing, from: shopifyProduct, context: context)
-            } else {
-                // New product
-                let product = createProduct(from: shopifyProduct)
-                product.store = store
-                context.insert(product)
-
-                changes.append(ChangeEvent(
-                    changeType: .newProduct,
-                    productTitle: shopifyProduct.title,
-                    store: store
-                ))
-            }
-        }
-
-        // Removed products
-        for existing in existingProducts where !fetchedIds.contains(existing.shopifyId) {
-            if !existing.isRemoved {
-                changes.append(ChangeEvent(
-                    changeType: .productRemoved,
-                    productTitle: existing.title,
-                    store: store
-                ))
-            }
-            existing.isRemoved = true
-        }
-
-        // Insert all change events
         for change in changes {
             context.insert(change)
         }
+        return changes
+    }
 
+    private func processFetchedProducts(
+        _ shopifyProducts: [ShopifyProduct],
+        existingByShopifyId: [Int64: Product],
+        store: Store,
+        context: ModelContext
+    ) -> [ChangeEvent] {
+        var changes: [ChangeEvent] = []
+        for shopifyProduct in shopifyProducts {
+            if let existing = existingByShopifyId[shopifyProduct.id] {
+                let productChanges = detectChanges(existing: existing, fetched: shopifyProduct, store: store)
+                changes.append(contentsOf: productChanges)
+                updateProduct(existing, from: shopifyProduct, context: context)
+            } else {
+                let product = createProduct(from: shopifyProduct)
+                product.store = store
+                context.insert(product)
+                changes.append(ChangeEvent(changeType: .newProduct, productTitle: shopifyProduct.title, store: store))
+            }
+        }
+        return changes
+    }
+
+    private func processRemovedProducts(
+        _ existingProducts: [Product],
+        fetchedIds: Set<Int64>,
+        store: Store
+    ) -> [ChangeEvent] {
+        var changes: [ChangeEvent] = []
+        for existing in existingProducts where !fetchedIds.contains(existing.shopifyId) {
+            if !existing.isRemoved {
+                changes.append(ChangeEvent(changeType: .productRemoved, productTitle: existing.title, store: store))
+            }
+            existing.isRemoved = true
+        }
         return changes
     }
 
@@ -150,51 +159,88 @@ final class StoreService {
         store: Store
     ) -> [ChangeEvent] {
         var changes: [ChangeEvent] = []
-
         let existingVariants = Dictionary(uniqueKeysWithValues: existing.variants.map { ($0.shopifyId, $0) })
 
         for fetchedVariant in fetched.variants {
-            guard let existingVariant = existingVariants[fetchedVariant.id] else {
-                // New variant - could track this too, but skip for now
-                continue
-            }
+            guard let existingVariant = existingVariants[fetchedVariant.id] else { continue }
+            changes += detectVariantChanges(
+                existing: existingVariant,
+                fetched: fetchedVariant,
+                productTitle: existing.title,
+                store: store
+            )
+        }
 
-            // Price change
-            if existingVariant.price != fetchedVariant.price {
-                let priceDrop = fetchedVariant.price < existingVariant.price
-                let oldPrice = existingVariant.price as NSDecimalNumber
-                let difference = abs((fetchedVariant.price - existingVariant.price) as NSDecimalNumber as Decimal)
-                let percentChange = oldPrice.decimalValue != 0
-                    ? (difference / oldPrice.decimalValue) * 100
-                    : Decimal(0)
+        changes += detectImageChanges(existing: existing, fetched: fetched, store: store)
+        return changes
+    }
 
-                let magnitude: ChangeMagnitude =
-                    percentChange > 25 ? .large :
-                    percentChange > 10 ? .medium : .small
+    private func detectVariantChanges(
+        existing: Variant,
+        fetched: ShopifyVariant,
+        productTitle: String,
+        store: Store
+    ) -> [ChangeEvent] {
+        var changes: [ChangeEvent] = []
 
-                changes.append(ChangeEvent(
-                    changeType: priceDrop ? .priceDropped : .priceIncreased,
-                    productTitle: existing.title,
-                    variantTitle: existingVariant.title,
-                    oldValue: formatPrice(existingVariant.price),
-                    newValue: formatPrice(fetchedVariant.price),
-                    magnitude: magnitude,
-                    store: store
-                ))
-            }
+        if existing.price != fetched.price {
+            changes.append(makePriceChangeEvent(
+                existing: existing,
+                fetched: fetched,
+                productTitle: productTitle,
+                store: store
+            ))
+        }
 
-            // Availability change
-            if existingVariant.available != fetchedVariant.available {
-                changes.append(ChangeEvent(
-                    changeType: fetchedVariant.available ? .backInStock : .outOfStock,
-                    productTitle: existing.title,
-                    variantTitle: existingVariant.title,
-                    store: store
-                ))
-            }
+        if existing.available != fetched.available {
+            changes.append(ChangeEvent(
+                changeType: fetched.available ? .backInStock : .outOfStock,
+                productTitle: productTitle,
+                variantTitle: existing.title,
+                store: store
+            ))
         }
 
         return changes
+    }
+
+    private func makePriceChangeEvent(
+        existing: Variant,
+        fetched: ShopifyVariant,
+        productTitle: String,
+        store: Store
+    ) -> ChangeEvent {
+        let priceDrop = fetched.price < existing.price
+        let oldPrice = existing.price as NSDecimalNumber
+        let difference = abs((fetched.price - existing.price) as NSDecimalNumber as Decimal)
+        let percentChange = oldPrice.decimalValue != 0 ? (difference / oldPrice.decimalValue) * 100 : Decimal(0)
+        let magnitude: ChangeMagnitude = percentChange > 25 ? .large : percentChange > 10 ? .medium : .small
+
+        return ChangeEvent(
+            changeType: priceDrop ? .priceDropped : .priceIncreased,
+            productTitle: productTitle,
+            variantTitle: existing.title,
+            oldValue: formatPrice(existing.price),
+            newValue: formatPrice(fetched.price),
+            priceChange: fetched.price - existing.price,
+            magnitude: magnitude,
+            store: store
+        )
+    }
+
+    private func detectImageChanges(existing: Product, fetched: ShopifyProduct, store: Store) -> [ChangeEvent] {
+        let fetchedURLs = fetched.images.map { $0.src }
+        guard existing.imageURLs != fetchedURLs else { return [] }
+        let oldCount = existing.imageURLs.count, newCount = fetchedURLs.count
+        guard oldCount != newCount else { return [] }
+
+        return [ChangeEvent(
+            changeType: .imagesChanged,
+            productTitle: existing.title,
+            oldValue: "\(oldCount) images",
+            newValue: "\(newCount) images",
+            store: store
+        )]
     }
 
     private func formatPrice(_ price: Decimal) -> String {
@@ -207,9 +253,10 @@ final class StoreService {
             handle: shopify.handle,
             title: shopify.title,
             vendor: shopify.vendor,
-            productType: shopify.productType,
-            imageURL: shopify.images.first.flatMap { URL(string: $0.src) }
+            productType: shopify.productType
         )
+
+        product.imageURLs = shopify.images.map { $0.src }
 
         for shopifyVariant in shopify.variants {
             let variant = Variant(
@@ -233,9 +280,11 @@ final class StoreService {
         product.handle = shopify.handle
         product.vendor = shopify.vendor
         product.productType = shopify.productType
-        product.imageURL = shopify.images.first.flatMap { URL(string: $0.src) }
         product.lastSeenAt = Date()
         product.isRemoved = false
+
+        // Update images - simple array replacement
+        product.imageURLs = shopify.images.map { $0.src }
 
         let existingVariants = Dictionary(uniqueKeysWithValues: product.variants.map { ($0.shopifyId, $0) })
         let fetchedVariantIds = Set(shopify.variants.map { $0.id })

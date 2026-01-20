@@ -1,4 +1,4 @@
-    //
+//
 //  SyncNotificationTests.swift
 //  watchifyTests
 //
