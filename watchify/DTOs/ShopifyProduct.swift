@@ -24,6 +24,26 @@ struct ShopifyProduct: Codable {
         case productType = "product_type"
         case createdAt = "created_at"
     }
+
+    init(
+        id: Int64,
+        title: String,
+        handle: String,
+        vendor: String?,
+        productType: String?,
+        createdAt: Date? = nil,
+        images: [ShopifyImage],
+        variants: [ShopifyVariant]
+    ) {
+        self.id = id
+        self.title = title
+        self.handle = handle
+        self.vendor = vendor
+        self.productType = productType
+        self.createdAt = createdAt
+        self.images = images
+        self.variants = variants
+    }
 }
 
 struct ShopifyImage: Codable {
@@ -60,5 +80,23 @@ struct ShopifyVariant: Codable {
         } else {
             compareAtPrice = nil
         }
+    }
+
+    init(
+        id: Int64,
+        title: String,
+        sku: String?,
+        price: Decimal,
+        compareAtPrice: Decimal?,
+        available: Bool,
+        position: Int
+    ) {
+        self.id = id
+        self.title = title
+        self.sku = sku
+        self.price = price
+        self.compareAtPrice = compareAtPrice
+        self.available = available
+        self.position = position
     }
 }

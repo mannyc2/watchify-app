@@ -9,7 +9,7 @@ import SwiftUI
 struct AddStoreSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @Binding var selection: Store?
+    @Binding var selection: Store.ID?
 
     @State private var domain = ""
     @State private var name = ""
@@ -78,7 +78,7 @@ struct AddStoreSheet: View {
                 domain: normalizedDomain,
                 context: modelContext
             )
-            selection = store
+            selection = store.id
             dismiss()
         } catch {
             self.error = "Not a valid Shopify store: \(error.localizedDescription)"
@@ -87,6 +87,6 @@ struct AddStoreSheet: View {
 }
 
 #Preview {
-    AddStoreSheet(selection: .constant(nil))
+    AddStoreSheet(selection: .constant(nil as Store.ID?))
         .modelContainer(for: Store.self, inMemory: true)
 }

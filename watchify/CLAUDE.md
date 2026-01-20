@@ -18,12 +18,17 @@ open Watchify.xcodeproj
 # Build and run
 ~/bin/xcede buildrun
 
+# Test
+xcodebuild test -scheme watchify -destination 'platform=macOS'
+
 # Lint
 swiftlint
 
 # Clean
 ~/bin/xcede clean
 ```
+
+Git pre-commit hook runs build, lint, and tests automatically.
 
 Config is in `.xcrc` (scheme, platform, device). Currently set to `platform=mac`.
 
@@ -33,6 +38,17 @@ Config is in `.xcrc` (scheme, platform, device). Currently set to `platform=mac`
 - **SwiftData** for persistence
 - **Swift Charts** for price history
 - **Actors** for thread-safe networking
+
+## UI Guidelines
+
+- **Empty States**: Always use `ContentUnavailableView` with icon, description, and optional action button
+  ```swift
+  ContentUnavailableView(
+      "No Items",
+      systemImage: "tray",
+      description: Text("Your items will appear here")
+  )
+  ```
 
 ## Architecture
 
@@ -79,12 +95,11 @@ Config is in `.xcrc` (scheme, platform, device). Currently set to `platform=mac`
 
 ## Known Issues to Fix During Implementation
 
-1. **Pagination**: Spec shows `?page=N` but Shopify uses cursor-based `page_info`. See [docs/shopify-api.md](docs/shopify-api.md).
+1. **Price decoding**: Shopify returns price as string `"29.99"`. Need custom decoder.
 
-2. **Price decoding**: Shopify returns price as string `"29.99"`. Need custom decoder.
+2. ~~**Actor isolation**~~: Resolved - `StoreService` is now `@MainActor` so it can access `ModelContext` directly.
 
-3. ~~**Actor isolation**~~: Resolved - `StoreService` is now `@MainActor` so it can access `ModelContext` directly.
+3. **ChangeEvent persistence**: Events are created but never `context.insert()`ed.
 
-4. **ChangeEvent persistence**: Events are created but never `context.insert()`ed.
+4. **`recentPriceChange` perf**: Sorts snapshots on every access. Cache or compute once.
 
-5. **`recentPriceChange` perf**: Sorts snapshots on every access. Cache or compute once.

@@ -14,6 +14,6 @@ struct WatchifyApp: App {
         WindowGroup {
             ContentView()
         }
-        .modelContainer(for: [Store.self, Product.self, Variant.self])
+        .modelContainer(for: [Store.self, Product.self, Variant.self, VariantSnapshot.self, ChangeEvent.self])
     }
 }

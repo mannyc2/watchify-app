@@ -191,58 +191,100 @@ Small, working increments. Each iteration should be completable in 1-3 hours and
 
 ---
 
-## Iteration 13: Diff Detection
+## Iteration 13: Diff Detection ✅
 
 **Goal**: Detect what changed.
 
-- [ ] Create `ProductDiff` struct
-- [ ] Implement diff logic:
+- [x] Implement diff logic in `saveProducts`:
   - New products (in fetch, not in DB)
   - Removed products (in DB, not in fetch)
   - Updated products (price or availability changed)
-- [ ] Return diff from save function
+- [x] Add `detectChanges` helper for variant-level change detection
+- [x] Return `[ChangeEvent]` from `saveProducts`
+- [x] Add `isInitialImport` flag to skip change events on first add
 
 **Test**: Add product on Shopify, sync, diff shows it as new.
 
 ---
 
-## Iteration 14: Data Model - ChangeEvent
+## Iteration 14: Data Model - ChangeEvent ✅
 
 **Goal**: Persist detected changes.
 
-- [ ] Create `Models/ChangeEvent.swift`
-- [ ] Fields: changeType, productTitle, variantTitle, oldValue, newValue, occurredAt, isRead
-- [ ] Add relationship to Store
-- [ ] Insert ChangeEvents when diff detected
+- [x] Create `Models/ChangeEvent.swift`
+- [x] Fields: id, changeType, productTitle, variantTitle, oldValue, newValue, occurredAt, isRead, magnitude
+- [x] Add `changeEvents` relationship to Store
+- [x] Insert ChangeEvents when diff detected
+- [x] Add ChangeEvent to ModelContainer
 
 **Test**: Sync detects change, ChangeEvent persisted.
 
 ---
 
-## Iteration 15: Activity View (Basic)
+## Iteration 14a: Test Change Detection ✅
+
+**Goal**: Verify ChangeEvents are created and persisted correctly.
+
+- [x] Add `ShopifyAPIProtocol` for dependency injection
+- [x] Update `StoreService` to accept injected API
+- [x] Create `MockShopifyAPI` for tests
+- [x] Create `watchifyTests` test target with Swift Testing
+- [x] Add `TestContext` class to reduce test boilerplate
+- [x] Add assertion helpers (`fetchEvents`, `expectEvent`, `expectEventCount`)
+- [x] Add test tags for organization (`.changeDetection`, `.priceChanges`, `.stockChanges`, etc.)
+- [x] Write 14 comprehensive tests:
+  - **Initial Import**: `addStoreCreatesNoEvents`, `syncWithNoChangesCreatesNoEvents`
+  - **Price Changes**: `syncDetectsPriceDrop`, `syncDetectsPriceIncrease`
+  - **Stock Changes**: `syncDetectsBackInStock`, `syncDetectsOutOfStock`
+  - **Product Lifecycle**: `syncDetectsNewProducts`, `syncDetectsRemovedProducts`
+  - **Complex**: `syncDetectsMultipleChanges`
+  - **Error Handling**: `syncHandlesAPIErrors`, `addStoreHandlesAPIErrors`
+  - **Isolation**: `testsAreIsolated` (parameterized, 3 iterations)
+
+**Test**: All 14 tests pass via `xcodebuild test`.
+
+---
+
+## Iteration 15: Activity View (Basic) ✅
 
 **Goal**: See change history.
 
-- [ ] Create `ActivityView.swift`
-- [ ] `@Query` all ChangeEvents, sorted by date desc
-- [ ] Simple list with type icon, product name, values
-- [ ] Add "Activity" link to sidebar
+- [x] Create `ActivityView.swift`
+- [x] `@Query` all ChangeEvents, sorted by date desc
+- [x] Simple list with type icon, product name, values
+- [x] Add "Activity" link to sidebar
 
 **Test**: Make changes happen, see them in activity.
 
 ---
 
-## Iteration 16: Data Model - Snapshots
+## Iteration 15a: Activity UX Improvement ✅
+
+**Goal**: Move Activity from sidebar to toolbar for better UX.
+
+- [x] Remove `.activity` case from `SidebarSelection`
+- [x] Remove Activity section from `SidebarView`
+- [x] Add Activity toolbar button to `ContentView`
+- [x] Present `ActivityView` as sheet with detents
+- [x] Apply `.buttonStyle(.glass)` for Liquid Glass
+
+**Test**: Activity button in toolbar, opens as sheet, store context preserved. ✅
+
+---
+
+## Iteration 16: Data Model - Snapshots ✅
 
 **Goal**: Track historical values.
 
-- [ ] Create `Models/VariantSnapshot.swift`
-- [ ] Fields: capturedAt, price, compareAtPrice, available
-- [ ] Relationship to Variant
-- [ ] Create snapshot when variant values change
-- [ ] (Skip ProductSnapshot for now—variant is what matters)
+- [x] Create `Models/VariantSnapshot.swift`
+- [x] Fields: capturedAt, price, compareAtPrice, available
+- [x] Relationship to Variant (with cascade delete)
+- [x] Create snapshot when variant values change (in `StoreService.updateProduct()`)
+- [x] Add `priceHistory` and `mostRecentSnapshot` computed properties to Variant
+- [x] Add comprehensive tests in `VariantSnapshotTests.swift`
+- [x] (Skip ProductSnapshot for now—variant is what matters)
 
-**Test**: Price changes twice, two snapshots exist.
+**Test**: Price changes twice, two snapshots exist. ✅
 
 ---
 

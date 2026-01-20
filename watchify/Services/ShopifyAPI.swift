@@ -5,7 +5,11 @@
 
 import Foundation
 
-actor ShopifyAPI {
+protocol ShopifyAPIProtocol: Sendable {
+    func fetchProducts(domain: String) async throws -> [ShopifyProduct]
+}
+
+actor ShopifyAPI: ShopifyAPIProtocol {
     private let session: URLSession
     private let decoder: JSONDecoder
 
@@ -22,9 +26,13 @@ actor ShopifyAPI {
 
     func fetchProducts(domain: String) async throws -> [ShopifyProduct] {
         var allProducts: [ShopifyProduct] = []
-        var nextURL: URL? = URL(string: "https://\(domain)/products.json?limit=250")
+        var page = 1
 
-        while let url = nextURL {
+        while true {
+            guard let url = URL(string: "https://\(domain)/products.json?limit=250&page=\(page)") else {
+                throw ShopifyAPIError.invalidResponse
+            }
+
             let (data, response) = try await session.data(from: url)
 
             guard let httpResponse = response as? HTTPURLResponse else {
@@ -36,24 +44,16 @@ actor ShopifyAPI {
             }
 
             let result = try decoder.decode(ShopifyProductsResponse.self, from: data)
-            allProducts.append(contentsOf: result.products)
 
-            nextURL = parseNextPageURL(from: httpResponse)
+            if result.products.isEmpty {
+                break
+            }
+
+            allProducts.append(contentsOf: result.products)
+            page += 1
         }
 
         return allProducts
-    }
-
-    private func parseNextPageURL(from response: HTTPURLResponse) -> URL? {
-        guard let linkHeader = response.value(forHTTPHeaderField: "Link") else {
-            return nil
-        }
-
-        let pattern = /<([^>]+)>;\s*rel="next"/
-        if let match = linkHeader.firstMatch(of: pattern) {
-            return URL(string: String(match.1))
-        }
-        return nil
     }
 }
 

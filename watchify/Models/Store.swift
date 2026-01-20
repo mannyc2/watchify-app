@@ -17,6 +17,9 @@ final class Store {
     @Relationship(deleteRule: .cascade, inverse: \Product.store)
     var products: [Product] = []
 
+    @Relationship(deleteRule: .cascade, inverse: \ChangeEvent.store)
+    var changeEvents: [ChangeEvent] = []
+
     init(id: UUID = UUID(), name: String, domain: String, addedAt: Date = Date()) {
         self.id = id
         self.name = name

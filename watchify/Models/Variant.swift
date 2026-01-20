@@ -18,6 +18,9 @@ final class Variant {
 
     var product: Product?
 
+    @Relationship(deleteRule: .cascade, inverse: \VariantSnapshot.variant)
+    var snapshots: [VariantSnapshot] = []
+
     init(
         shopifyId: Int64,
         title: String,
@@ -34,5 +37,17 @@ final class Variant {
         self.compareAtPrice = compareAtPrice
         self.available = available
         self.position = position
+    }
+
+    // MARK: - Convenience Computed Properties
+
+    /// Returns all snapshots sorted chronologically (oldest to newest)
+    var priceHistory: [VariantSnapshot] {
+        snapshots.sorted { $0.capturedAt < $1.capturedAt }
+    }
+
+    /// Returns the most recent snapshot, if any
+    var mostRecentSnapshot: VariantSnapshot? {
+        snapshots.max { $0.capturedAt < $1.capturedAt }
     }
 }

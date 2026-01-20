@@ -82,56 +82,42 @@ struct ShopifyVariant: Codable {
 
 ## Pagination
 
-### ⚠️ `?page=N` is Deprecated
-
-The spec shows `?page=1`, `?page=2`, etc. This is unreliable.
-
-### Correct: Cursor-Based Pagination
-
-Shopify uses `Link` header with `page_info` parameter:
+Use `?page=N` to paginate through products:
 
 ```
-Link: <https://store.myshopify.com/products.json?page_info=abc123&limit=250>; rel="next"
+GET https://{store-domain}/products.json?limit=250&page=1
+GET https://{store-domain}/products.json?limit=250&page=2
+...
 ```
+
+Continue incrementing until an empty `products` array is returned.
 
 Implementation:
 
 ```swift
 func fetchAllProducts(domain: String) async throws -> [ShopifyProduct] {
     var allProducts: [ShopifyProduct] = []
-    var nextURL: URL? = URL(string: "https://\(domain)/products.json?limit=250")
-    
-    while let url = nextURL {
-        let (data, response) = try await session.data(from: url)
-        
-        let result = try decoder.decode(ShopifyProductsResponse.self, from: data)
-        allProducts.append(contentsOf: result.products)
-        
-        // Parse Link header for next page
-        nextURL = parseNextPageURL(from: response)
-    }
-    
-    return allProducts
-}
+    var page = 1
 
-func parseNextPageURL(from response: URLResponse) -> URL? {
-    guard let httpResponse = response as? HTTPURLResponse,
-          let linkHeader = httpResponse.value(forHTTPHeaderField: "Link") else {
-        return nil
+    while true {
+        let url = URL(string: "https://\(domain)/products.json?limit=250&page=\(page)")!
+        let (data, _) = try await session.data(from: url)
+
+        let result = try decoder.decode(ShopifyProductsResponse.self, from: data)
+
+        if result.products.isEmpty {
+            break
+        }
+
+        allProducts.append(contentsOf: result.products)
+        page += 1
     }
-    
-    // Parse: <URL>; rel="next"
-    let pattern = #/<([^>]+)>;\s*rel="next"/#
-    if let match = linkHeader.firstMatch(of: pattern) {
-        return URL(string: String(match.1))
-    }
-    return nil
+
+    return allProducts
 }
 ```
 
-### Most Stores Don't Need Pagination
-
-250 products per page. Only stores with 250+ products need multiple requests.
+Most stores have fewer than 250 products, so only one request is needed.
 
 ## DTOs
 

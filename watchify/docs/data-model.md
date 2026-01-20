@@ -77,11 +77,21 @@ class Variant {
     var compareAtPrice: Decimal?
     var available: Bool
     var position: Int
-    
+
     var product: Product?
-    
+
     @Relationship(deleteRule: .cascade, inverse: \VariantSnapshot.variant)
     var snapshots: [VariantSnapshot]
+
+    // Convenience: snapshots sorted oldest to newest
+    var priceHistory: [VariantSnapshot] {
+        snapshots.sorted { $0.capturedAt < $1.capturedAt }
+    }
+
+    // Convenience: most recent snapshot (if any)
+    var mostRecentSnapshot: VariantSnapshot? {
+        snapshots.max { $0.capturedAt < $1.capturedAt }
+    }
 }
 ```
 
