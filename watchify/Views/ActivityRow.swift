@@ -10,8 +10,8 @@ struct ActivityRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: iconName)
-                .foregroundStyle(iconColor)
+            Image(systemName: event.changeType.icon)
+                .foregroundStyle(event.changeType.color)
                 .font(.title2)
                 .frame(width: 32)
                 .accessibilityLabel(accessibilityLabel)
@@ -44,36 +44,6 @@ struct ActivityRow: View {
         .padding(.vertical, 4)
     }
 
-    private var iconName: String {
-        switch event.changeType {
-        case .priceDropped:
-            "arrow.down.circle.fill"
-        case .priceIncreased:
-            "arrow.up.circle.fill"
-        case .backInStock:
-            "checkmark.circle.fill"
-        case .outOfStock:
-            "xmark.circle.fill"
-        case .newProduct:
-            "sparkles"
-        case .productRemoved:
-            "trash"
-        }
-    }
-
-    private var iconColor: Color {
-        switch event.changeType {
-        case .priceDropped, .backInStock:
-            .green
-        case .priceIncreased, .outOfStock:
-            .red
-        case .newProduct:
-            .blue
-        case .productRemoved:
-            .secondary
-        }
-    }
-
     private var accessibilityLabel: String {
         switch event.changeType {
         case .priceDropped:
@@ -97,4 +67,62 @@ struct ActivityRow: View {
         }
         return "\(oldValue) → \(newValue)"
     }
+}
+
+// MARK: - Previews
+
+#Preview("Price Dropped") {
+    ActivityRow(event: ChangeEvent(
+        changeType: .priceDropped,
+        productTitle: "Wool Runners",
+        variantTitle: "Size 10 / Natural White",
+        oldValue: "$110",
+        newValue: "$89"
+    ))
+    .padding()
+}
+
+#Preview("Price Increased") {
+    ActivityRow(event: ChangeEvent(
+        changeType: .priceIncreased,
+        productTitle: "Tree Dashers",
+        variantTitle: "Size 9",
+        oldValue: "$125",
+        newValue: "$135"
+    ))
+    .padding()
+}
+
+#Preview("Back In Stock") {
+    ActivityRow(event: ChangeEvent(
+        changeType: .backInStock,
+        productTitle: "Wool Loungers",
+        variantTitle: "Size 11 / Natural Black"
+    ))
+    .padding()
+}
+
+#Preview("Out of Stock") {
+    ActivityRow(event: ChangeEvent(
+        changeType: .outOfStock,
+        productTitle: "Tree Breezers",
+        variantTitle: "Size 8"
+    ))
+    .padding()
+}
+
+#Preview("New Product") {
+    ActivityRow(event: ChangeEvent(
+        changeType: .newProduct,
+        productTitle: "Trail Runner SWT"
+    ))
+    .padding()
+}
+
+#Preview("Product Removed") {
+    ActivityRow(event: ChangeEvent(
+        changeType: .productRemoved,
+        productTitle: "Discontinued Shoe"
+    ))
+    .padding()
 }

@@ -361,6 +361,163 @@ Small, working increments. Each iteration should be completable in 1-3 hours and
 
 ---
 
+## Iteration 19b: Sidebar - Richer Store Rows ⏭️ (Skipped)
+
+**Goal**: Store rows show more than just name.
+
+**Decision**: Keeping store rows simple (icon + name only). Sync status felt too prominent/noisy in the sidebar. Per-store sync tracking added to `SyncScheduler` for potential future use.
+
+---
+
+## Iteration 19c: Sidebar - Section Structure ✅
+
+**Goal**: Separate navigation destinations from stores.
+
+- [x] Add section header "Stores" above store list
+- [x] Add "Overview" destination at top of sidebar (before stores)
+- [x] Move Activity from toolbar button to sidebar destination (below Overview, above Stores section)
+- [x] Add "+ Add Store" row at bottom of Stores section (or as footer)
+- [x] Update `SidebarSelection` enum to handle new structure
+
+**Sidebar structure:**
+```
+Overview
+Activity
+─────────
+Stores
+  Allbirds
+  Glossier
+  + Add Store
+```
+
+**Files**:
+- `Views/SidebarView.swift` - Added `SidebarSelection` enum, restructured layout
+- `Views/OverviewView.swift` - New placeholder view
+- `ContentView.swift` - Updated selection type, removed Activity sheet
+- `Views/AddStoreSheet.swift` - Updated selection binding
+
+**Test**: Can navigate between Overview, Activity, and stores. Add Store works from sidebar. ✅
+
+---
+
+## Iteration 19d: Overview - Basic Layout ✅
+
+**Goal**: Overview shows all stores at a glance.
+
+- [x] Create `OverviewView.swift` (placeholder created in 19c)
+- [x] Make Overview the default selection when app launches (done in 19c)
+- [x] Display store cards in adaptive grid (`LazyVGrid` with `GridItem(.adaptive(minimum: 280, maximum: 400))`)
+- [x] Create `StoreCard.swift` with: name, product count, preview images (up to 3), event badges (24h changes)
+- [x] Clicking a card navigates to that store's detail
+- [x] Empty state with `ContentUnavailableView` when no stores
+
+**Test**: Launch app, see Overview with store cards. Click card, navigate to store. ✅
+
+---
+
+## Iteration 19e: Overview - Store Card Polish ✅
+
+**Goal**: Store cards show useful status info.
+
+- [x] Add recent changes count via `EventBadge` (shows 24h changes by type)
+- [x] Empty state when no stores: `ContentUnavailableView` with "Add your first store"
+- [x] Card styling with `.regularMaterial` background, subtle border, and shadow
+
+**Deferred**:
+- Sync status indicator on card
+- Sync button on card
+- Liquid Glass (`.glassEffect`) - using `.regularMaterial` for now
+
+**Test**: Launch app, Overview shows store cards with event badges. Empty state shows add button. ✅
+
+---
+
+## Iteration 19f: Activity - Full Page with Filters ✅
+
+**Goal**: Activity is a proper filterable view.
+
+- [x] Create full `ActivityView` as sidebar destination (not sheet)
+- [x] Add filter bar: Store dropdown (All / specific store), Type dropdown (All / Price / Stock / New)
+- [x] Add date preset picker (Today / 7 days / 30 days / All)
+- [x] Group events by date with section headers
+- [x] Remove old toolbar button + sheet approach (was already sidebar destination)
+
+**Implementation Notes**:
+- `DateRange` enum with `.today`, `.week`, `.month`, `.all` cases
+- `TypeFilter` enum grouping change types into Price/Stock/Product categories
+- In-view filtering via computed properties (simpler than dynamic @Query)
+- Events grouped by calendar day with "Today"/"Yesterday"/date headers
+- Clear button appears when filters are active
+
+**Test**: Navigate to Activity, filter by store, filter by type, see grouped results.
+
+---
+
+## Iteration 19g: Store Detail - Header Section ✅
+
+**Goal**: Store detail view has a proper header.
+
+- [x] Add header to `StoreDetailView`: store name, domain, product count
+- [x] Show sync status and last sync time in header
+- [x] Move Sync button into header (or keep in toolbar)
+- [x] Add visual separation between header and product list
+
+**Test**: Select store, see header with all info, sync button works. ✅
+
+---
+
+## Iteration 19h: ChangeType Icon & Color Standardization ✅
+
+**Goal**: Consistent icons and colors for change events across views.
+
+**Problem**: Icons and colors were inconsistent between `ActivityRow` and `StoreCard`:
+- `priceDropped`: ActivityRow used `arrow.down.circle.fill`, StoreCard used `tag.fill`
+- `backInStock`: ActivityRow used green, StoreCard used blue
+- `newProduct`: ActivityRow used `sparkles`, StoreCard used `bag.badge.plus`
+
+**Solution**:
+- [x] Add `icon` and `color` computed properties to `ChangeType` enum
+- [x] Update `ActivityRow` to use `event.changeType.icon` and `.color`
+- [x] Update `StoreCard.EventBadge` to use `ChangeType.icon` and `.color`
+
+**Standardized Icons**:
+| ChangeType | Icon | Color | Rationale |
+|------------|------|-------|-----------|
+| `priceDropped` | `tag.fill` | green | Positive (savings) |
+| `priceIncreased` | `tag.fill` | red | Negative (costs more) |
+| `backInStock` | `shippingbox.fill` | blue | Availability info |
+| `outOfStock` | `shippingbox.fill` | orange | Warning |
+| `newProduct` | `bag.badge.plus` | purple | Discovery |
+| `productRemoved` | `bag.badge.minus` | secondary | Neutral |
+
+**Files**:
+- `Models/ChangeEvent.swift` - Added extension with `icon` and `color`
+- `Views/ActivityRow.swift` - Removed local icon/color logic
+- `Views/StoreCard.swift` - Updated EventBadge calls
+
+**Test**: ActivityView and StoreCard badges now use identical icons and colors.
+
+---
+
+## Iteration 19i: Comprehensive SwiftUI Previews ✅
+
+**Goal**: Ensure all views have comprehensive previews covering each meaningful state.
+
+- [x] `ActivityRow.swift` - 6 states: Price Dropped, Price Increased, Back In Stock, Out of Stock, New Product, Product Removed
+- [x] `StoreCard.swift` - 4 states: Empty Store, With Products, With Price Drop Badge, With Back In Stock Badge
+- [x] `StoreDetailView.swift` - 5 states: Empty Products, With Products, Rate Limited, ProductRow In Stock, ProductRow Out of Stock
+- [x] `AddStoreSheet.swift` - 3 states: Empty Form, Loading State, Error State
+- [x] `SidebarView.swift` - 3 states: Empty Stores, With Stores, With Store Selected
+- [x] `SyncStatusView.swift` - 2 states: Waiting State, Ready State
+
+**Pattern**: Follow `ActivityView.swift` pattern with `makePreviewContainer()` helper and inline sample data.
+
+**Total**: 23 preview states across 6 files.
+
+**Test**: Build succeeds, all previews render in Xcode. ✅
+
+---
+
 ## Iteration 20: Product Grid
 
 **Goal**: Better product display.
@@ -616,6 +773,7 @@ Small, working increments. Each iteration should be completable in 1-3 hours and
 | 11-12 | Basic product display |
 | 13-16 | Change detection + history |
 | 17-19a | Notifications + background sync + rate limit UX |
+| 19b-19i | Sidebar, Overview, Activity polish, Previews |
 | 20-24 | Product UI polish |
 | 25 | Charts |
 | 26-28 | Notification improvements |

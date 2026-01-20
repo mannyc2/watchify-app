@@ -56,3 +56,27 @@ enum ChangeMagnitude: String, Codable {
     case medium   // 10-25%
     case large    // > 25%
 }
+
+import SwiftUI
+
+extension ChangeType {
+    var icon: String {
+        switch self {
+        case .priceDropped, .priceIncreased: "tag.fill"
+        case .backInStock, .outOfStock: "shippingbox.fill"
+        case .newProduct: "bag.badge.plus"
+        case .productRemoved: "bag.badge.minus"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .priceDropped: .green
+        case .priceIncreased: .red
+        case .backInStock: .blue
+        case .outOfStock: .orange
+        case .newProduct: .purple
+        case .productRemoved: .secondary
+        }
+    }
+}

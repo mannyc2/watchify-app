@@ -3,7 +3,7 @@
 //  watchify
 //
 
-import AppKit
+import Accessibility
 import SwiftUI
 
 struct SyncStatusView: View {
@@ -93,14 +93,9 @@ struct SyncStatusView: View {
     }
 
     private func announceReadyForAccessibility() {
-        NSAccessibility.post(
-            element: NSApp as Any,
-            notification: .announcementRequested,
-            userInfo: [
-                .announcement: "You can sync now.",
-                .priority: NSAccessibilityPriorityLevel.high.rawValue
-            ]
-        )
+        var announcement = AttributedString("You can sync now.")
+        announcement.accessibilitySpeechAnnouncementPriority = .high
+        AccessibilityNotification.Announcement(announcement).post()
     }
 
     private func scheduleAutoDismiss() {
@@ -112,9 +107,18 @@ struct SyncStatusView: View {
     }
 }
 
-#Preview {
+#Preview("Waiting State") {
     SyncStatusView(
-        retryAfter: 5,
+        retryAfter: 30,
+        onRetry: { print("Retry tapped") },
+        onDismiss: { print("Dismiss tapped") }
+    )
+    .padding()
+}
+
+#Preview("Ready State") {
+    SyncStatusView(
+        retryAfter: 0,
         onRetry: { print("Retry tapped") },
         onDismiss: { print("Dismiss tapped") }
     )

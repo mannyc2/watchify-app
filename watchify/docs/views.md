@@ -33,6 +33,8 @@ WatchifyApp
 │           │   ├── StoreRow (per store)
 │           │   └── "Activity" link
 │           └── Detail
+│               ├── OverviewView
+│               │   └── StoreCard (per store)
 │               ├── StoreDetailView
 │               │   └── ProductGrid
 │               │       └── ProductCard (per product)
@@ -200,11 +202,29 @@ struct MenuBarView: View {
 | Component | Purpose |
 |-----------|---------|
 | `StoreRow` | Sidebar row for a store |
+| `OverviewView` | Grid of store cards with adaptive layout |
+| `StoreCard` | Overview card showing name, product count, preview images, event badges |
 | `ProductCard` | Grid card for a product |
 | `PriceChangeIndicator` | Arrow + percentage badge |
 | `StockBadge` | "In Stock" / "Out of Stock" pill |
-| `ChangeEventRow` | Activity feed row |
+| `ActivityRow` | Activity feed row |
+| `EventBadge` | Compact badge showing event count |
 | `GlassCard` | Reusable glass wrapper |
+
+## ChangeType Icons & Colors
+
+Standardized via `ChangeType.icon` and `ChangeType.color` (see [data-model.md](data-model.md)):
+
+| ChangeType | Icon | Color | Rationale |
+|------------|------|-------|-----------|
+| `priceDropped` | `tag.fill` | green | Positive for user (savings) |
+| `priceIncreased` | `tag.fill` | red | Negative for user (costs more) |
+| `backInStock` | `shippingbox.fill` | blue | Informational, availability |
+| `outOfStock` | `shippingbox.fill` | orange | Warning, not available |
+| `newProduct` | `bag.badge.plus` | purple | Discovery, something new |
+| `productRemoved` | `bag.badge.minus` | secondary | Neutral, just informational |
+
+Used by `ActivityRow` and `StoreCard.EventBadge` for consistency.
 
 ## Liquid Glass Usage
 

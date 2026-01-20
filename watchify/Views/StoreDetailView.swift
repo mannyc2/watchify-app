@@ -8,14 +8,19 @@ import SwiftUI
 
 struct StoreDetailView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(SyncScheduler.self) private var syncScheduler
     let store: Store
 
     @Query private var products: [Product]
-    @State private var isSyncing = false
+    @State private var isLocalSyncing = false
     @State private var rateLimitRetryAfter: TimeInterval?
     @State private var otherError: Error?
 
     private let storeService = StoreService()
+
+    private var isSyncing: Bool {
+        isLocalSyncing || syncScheduler.isSyncing(store)
+    }
 
     init(store: Store) {
         self.store = store
@@ -43,6 +48,8 @@ struct StoreDetailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            header
+
             if let retryAfter = rateLimitRetryAfter {
                 SyncStatusView(
                     retryAfter: retryAfter,
@@ -53,6 +60,8 @@ struct StoreDetailView: View {
                 .padding(.vertical, 8)
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
+
+            Divider()
 
             Group {
                 if products.isEmpty {
@@ -73,22 +82,6 @@ struct StoreDetailView: View {
                 }
             }
         }
-        .navigationTitle(store.name)
-        .toolbar {
-            ToolbarItem {
-                Button {
-                    Task { await sync() }
-                } label: {
-                    if isSyncing {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Label("Sync", systemImage: "arrow.trianglehead.2.clockwise")
-                    }
-                }
-                .disabled(isSyncing)
-            }
-        }
         .alert("Sync Failed", isPresented: .constant(otherError != nil)) {
             Button("OK") { otherError = nil }
         } message: {
@@ -98,10 +91,58 @@ struct StoreDetailView: View {
         }
     }
 
+    // MARK: - Header
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(store.name)
+                    .font(.title.bold())
+                Spacer()
+                syncButton
+            }
+
+            HStack(spacing: 4) {
+                Text(store.domain)
+                Text("·")
+                Text("\(products.count) products")
+            }
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+
+            if let lastFetched = store.lastFetchedAt {
+                Text("Last synced \(lastFetched, format: .relative(presentation: .named))")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            } else {
+                Text("Never synced")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial)
+    }
+
+    private var syncButton: some View {
+        Button {
+            Task { await sync() }
+        } label: {
+            if isSyncing {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Label("Sync", systemImage: "arrow.trianglehead.2.clockwise")
+            }
+        }
+        .disabled(isSyncing)
+    }
+
     private func sync() async {
         rateLimitRetryAfter = nil
-        isSyncing = true
-        defer { isSyncing = false }
+        isLocalSyncing = true
+        defer { isLocalSyncing = false }
 
         do {
             let changes = try await storeService.syncStore(store, context: modelContext)
@@ -142,7 +183,123 @@ struct ProductRow: View {
     }
 }
 
-#Preview {
+// MARK: - Previews
+
+#Preview("Empty Products") {
     StoreDetailView(store: Store(name: "Test Store", domain: "test.myshopify.com"))
-        .modelContainer(for: [Store.self, Product.self, Variant.self], inMemory: true)
+        .environment(SyncScheduler.shared)
+        .modelContainer(for: [Store.self, Product.self, Variant.self, VariantSnapshot.self], inMemory: true)
+}
+
+#Preview("With Products") {
+    let container = makePreviewContainer()
+    let store = Store(name: "Allbirds", domain: "allbirds.com")
+    store.lastFetchedAt = Date().addingTimeInterval(-3600)
+    container.mainContext.insert(store)
+
+    let productData = [
+        ("Wool Runners", Decimal(110), true),
+        ("Tree Dashers", Decimal(125), true),
+        ("Wool Loungers", Decimal(95), false),
+        ("Tree Breezers", Decimal(100), true)
+    ]
+
+    for (idx, (title, price, available)) in productData.enumerated() {
+        let product = Product(
+            shopifyId: Int64(idx + 1),
+            handle: title.lowercased().replacingOccurrences(of: " ", with: "-"),
+            title: title
+        )
+        product.store = store
+
+        let variant = Variant(
+            shopifyId: Int64(idx + 100),
+            title: "Default",
+            price: price,
+            available: available,
+            position: 0
+        )
+        variant.product = product
+        container.mainContext.insert(product)
+        container.mainContext.insert(variant)
+    }
+
+    return StoreDetailView(store: store)
+        .environment(SyncScheduler.shared)
+        .modelContainer(container)
+}
+
+#Preview("Rate Limited") {
+    let container = makePreviewContainer()
+    let store = Store(name: "Busy Store", domain: "busy.myshopify.com")
+    container.mainContext.insert(store)
+
+    return VStack(spacing: 0) {
+        SyncStatusView(
+            retryAfter: 30,
+            onRetry: {},
+            onDismiss: {}
+        )
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+
+        Divider()
+
+        ContentUnavailableView {
+            Label("No Products", systemImage: "tray")
+        } description: {
+            Text("This store has no products, or they haven't been synced yet.")
+        }
+    }
+    .modelContainer(container)
+}
+
+#Preview("ProductRow - In Stock") {
+    let container = makePreviewContainer()
+    let product = Product(
+        shopifyId: 1,
+        handle: "wool-runners",
+        title: "Wool Runners"
+    )
+    container.mainContext.insert(product)
+
+    let variant = Variant(
+        shopifyId: 100,
+        title: "Size 10",
+        price: Decimal(110),
+        available: true,
+        position: 0
+    )
+    variant.product = product
+    container.mainContext.insert(variant)
+
+    return List {
+        ProductRow(product: product)
+    }
+    .modelContainer(container)
+}
+
+#Preview("ProductRow - Out of Stock") {
+    let container = makePreviewContainer()
+    let product = Product(
+        shopifyId: 2,
+        handle: "tree-dashers",
+        title: "Tree Dashers"
+    )
+    container.mainContext.insert(product)
+
+    let variant = Variant(
+        shopifyId: 200,
+        title: "Size 9",
+        price: Decimal(125),
+        available: false,
+        position: 0
+    )
+    variant.product = product
+    container.mainContext.insert(variant)
+
+    return List {
+        ProductRow(product: product)
+    }
+    .modelContainer(container)
 }

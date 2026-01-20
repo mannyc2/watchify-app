@@ -50,6 +50,21 @@ Config is in `.xcrc` (scheme, platform, device). Currently set to `platform=mac`
   )
   ```
 
+- **SwiftUI Previews**: When creating or modifying views, add previews for each meaningful state. Use the shared `makePreviewContainer()` from `Preview Content/PreviewHelpers.swift`:
+  ```swift
+  #Preview("State Name") {
+      let container = makePreviewContainer()
+      // Set up sample data...
+      return ViewName(...)
+          .modelContainer(container)
+  }
+  ```
+  Common states to cover: empty, populated, loading, error, edge cases (e.g., long text, missing data)
+
+## Code Style
+
+- Prefer SwiftUI and modern Apple frameworks over AppKit equivalents. Only use AppKit when SwiftUI lacks the capability.
+
 ## Architecture
 
 ```
@@ -102,4 +117,3 @@ Config is in `.xcrc` (scheme, platform, device). Currently set to `platform=mac`
 3. **ChangeEvent persistence**: Events are created but never `context.insert()`ed.
 
 4. **`recentPriceChange` perf**: Sorts snapshots on every access. Cache or compute once.
-

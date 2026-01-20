@@ -14,6 +14,11 @@ final class SyncScheduler {
     // Observable state
     private(set) var isSyncing = false
     private(set) var lastSyncAt: Date?
+    private(set) var syncingStores: Set<UUID> = []
+
+    func isSyncing(_ store: Store) -> Bool {
+        syncingStores.contains(store.id)
+    }
 
     // Dependencies
     private var container: ModelContainer?
@@ -81,6 +86,8 @@ final class SyncScheduler {
             guard !stores.isEmpty else { return }
 
             for store in stores {
+                syncingStores.insert(store.id)
+                defer { syncingStores.remove(store.id) }
                 do {
                     // syncStore handles notifications internally
                     try await storeService.syncStore(store, context: context)

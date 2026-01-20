@@ -25,6 +25,7 @@ struct WatchifyApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(SyncScheduler.shared)
                 .task {
                     // Starts sync loop - auto-cancelled when scene disappears
                     await SyncScheduler.shared.startBackgroundSync()

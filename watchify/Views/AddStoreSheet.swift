@@ -9,7 +9,7 @@ import SwiftUI
 struct AddStoreSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @Binding var selection: Store.ID?
+    @Binding var selection: SidebarSelection?
 
     @State private var domain = ""
     @State private var name = ""
@@ -78,7 +78,7 @@ struct AddStoreSheet: View {
                 domain: normalizedDomain,
                 context: modelContext
             )
-            selection = store.id
+            selection = .store(store.id)
             dismiss()
         } catch {
             self.error = "Not a valid Shopify store: \(error.localizedDescription)"
@@ -86,7 +86,52 @@ struct AddStoreSheet: View {
     }
 }
 
-#Preview {
-    AddStoreSheet(selection: .constant(nil as Store.ID?))
+#Preview("Empty Form") {
+    AddStoreSheet(selection: .constant(nil))
         .modelContainer(for: Store.self, inMemory: true)
+}
+
+#Preview("Loading State") {
+    AddStoreSheetPreview(isAdding: true, error: nil)
+}
+
+#Preview("Error State") {
+    AddStoreSheetPreview(isAdding: false, error: "Not a valid Shopify store: Connection failed")
+}
+
+/// Internal view for previewing AddStoreSheet states that require @State manipulation
+private struct AddStoreSheetPreview: View {
+    let isAdding: Bool
+    let error: String?
+
+    var body: some View {
+        Form {
+            TextField("Domain", text: .constant("invalid-store.com"), prompt: Text("allbirds.com"))
+                .autocorrectionDisabled()
+            TextField("Name (optional)", text: .constant("My Store"), prompt: Text("Allbirds"))
+
+            if let error {
+                Text(error)
+                    .foregroundStyle(.red)
+                    .font(.caption)
+            }
+        }
+        .formStyle(.grouped)
+        .frame(minWidth: 300)
+        .disabled(isAdding)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") {}
+                    .disabled(isAdding)
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                if isAdding {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Button("Add") {}
+                }
+            }
+        }
+    }
 }
