@@ -6,10 +6,15 @@
 import SwiftUI
 
 struct ActivityRow: View {
-    let event: ChangeEvent
+    @Bindable var event: ChangeEvent
 
     var body: some View {
         HStack(spacing: 12) {
+            // Unread indicator
+            Circle()
+                .fill(event.isRead ? Color.clear : Color.accentColor)
+                .frame(width: 8, height: 8)
+
             Image(systemName: event.changeType.icon)
                 .foregroundStyle(event.changeType.color)
                 .font(.title2)
@@ -49,6 +54,11 @@ struct ActivityRow: View {
                 .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 4)
+        .onAppear {
+            if !event.isRead {
+                event.isRead = true
+            }
+        }
     }
 
     private var accessibilityLabel: String {

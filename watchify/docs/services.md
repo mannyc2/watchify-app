@@ -141,7 +141,12 @@ final class SyncScheduler {
 
     private(set) var isSyncing: Bool = false
     private(set) var lastSyncAt: Date?
-    var intervalMinutes: Int = 60
+
+    // Reads from UserDefaults (matches @AppStorage in Settings)
+    var intervalMinutes: Int {
+        UserDefaults.standard.integer(forKey: "syncIntervalMinutes")
+            .clamped(to: 5...1440, default: 30)
+    }
 
     func configure(with container: ModelContainer)
     func startBackgroundSync() async
@@ -206,7 +211,10 @@ func startBackgroundSync() async {
 4. For each store:
    a. Call storeService.syncStore() (handles changes + notifications)
    b. Log errors but continue with other stores
-5. Update lastSyncAt
+5. Auto-delete old events if enabled in Settings
+   a. Check UserDefaults for "autoDeleteEvents" and "eventRetentionDays"
+   b. Delete ChangeEvents older than retention period
+6. Update lastSyncAt
 ```
 
 ### App Nap Prevention
@@ -245,15 +253,86 @@ sendIfAuthorized(for: changes)
   └── If authorized → send(for: changes)
 ```
 
-### Notification Content
+### Settings Integration
 
-Single notification per sync with change summary:
+The `send(for:)` method respects user preferences from Settings:
+
+1. **Master toggle**: Checks `notificationsEnabled` - if false, skips all notifications
+2. **Per-type filtering**: Filters changes by enabled types before sending
+   - Keys: `notifyPriceDropped`, `notifyPriceIncreased`, `notifyBackInStock`, etc.
+   - Defaults: All enabled except `notifyImagesChanged` (false by default)
+3. **Price thresholds**: Filters price changes by minimum threshold
+   - Keys: `priceDropThreshold`, `priceIncreaseThreshold`
+   - Uses `PriceThreshold` enum to check if change meets minimum
+
+### Price Threshold Filtering
+
+Users can set minimum thresholds for price change notifications:
 
 ```swift
-content.title = "Watchify"
+enum PriceThreshold: String, CaseIterable {
+    case any = "Any amount"
+    case dollars5 = "At least $5"
+    case dollars10 = "At least $10"
+    case dollars25 = "At least $25"
+    case percent10 = "At least 10%"
+    case percent25 = "At least 25%"
+
+    func isSatisfied(by change: ChangeEvent) -> Bool
+}
+```
+
+| Threshold | Check |
+|-----------|-------|
+| Any amount | Always passes |
+| At least $X | `abs(priceChange) >= X` |
+| At least X% | Uses `magnitude` enum (small <10%, medium 10-25%, large >25%) |
+
+The `meetsThreshold(_:)` method in NotificationService applies this filter:
+- Non-price changes (back in stock, etc.) always pass
+- Price drops use `priceDropThreshold` setting
+- Price increases use `priceIncreaseThreshold` setting
+
+### Notification Content
+
+One notification per store with grouped change summary:
+
+```swift
+content.title = store.name                    // e.g., "Allbirds"
 content.body = "3 price drops, 1 back in stock"
+content.threadIdentifier = store.id.uuidString  // Groups in Notification Center
+content.interruptionLevel = .timeSensitive    // Breaks through Focus mode
 content.sound = .default
 ```
+
+If changes have no associated store (orphan changes), the title is left empty and macOS shows the app name per Apple HIG.
+
+### Store Grouping
+
+The `send(for:)` method groups changes by store before sending:
+
+```swift
+let groupedByStore = Dictionary(grouping: changes) { $0.store?.id }
+
+for (_, storeChanges) in groupedByStore {
+    // Send one notification per store
+}
+```
+
+- **`threadIdentifier`**: Uses `store.id.uuidString` for stable grouping (store names could change)
+- **Visual grouping**: macOS Notification Center groups notifications with the same `threadIdentifier`
+
+### Notification Priority
+
+Interruption level is determined by the highest-priority change in the group:
+
+| Priority | Interruption Level | Sound | Criteria |
+|----------|-------------------|-------|----------|
+| High | `.timeSensitive` | Yes | Back in stock, large price drops (>25%) |
+| Normal | `.active` | Yes | Medium price drops (10-25%), price increases, stock changes, new/removed products |
+| Low | `.passive` | No | Small price drops (<10%), image changes |
+
+The `determinePriority(for:)` method evaluates all changes and returns the highest applicable level. This ensures important alerts break through Focus modes while minor changes remain unobtrusive.
 
 ### Body Formatting
 
@@ -272,8 +351,8 @@ formatBody(for: changes) → "3 price drops, 2 back in stock, 1 new product"
 | newProduct | "N new product(s)" |
 | productRemoved | "N product(s) removed" |
 
-### Future Improvements (Iteration 26-27)
+### Future Improvements
 
-- Group notifications by store using `threadIdentifier`
-- Priority levels (`.timeSensitive` for large price drops, back in stock)
-- Per-store notification preferences
+- Per-store notification preferences (currently global only)
+- Custom threshold values (currently preset options only)
+- Precise percentage calculation (currently uses magnitude enum as proxy)

@@ -18,10 +18,10 @@ Get it working end-to-end.
 
 ### Deferred
 
-- Charts (use simple list for now)
-- Menu bar extra
+- ~~Charts (use simple list for now)~~ ✅ Done (Iteration 24-25)
+- ~~Menu bar extra~~ ✅ Done (Iteration 30)
 - Liquid Glass polish
-- Smart notification grouping
+- ~~Smart notification grouping~~ ✅ Done (Iteration 26)
 
 ### Blockers to Resolve
 
@@ -41,13 +41,15 @@ Make it nice.
 
 ### Features
 
-- [ ] Swift Charts price history
-- [ ] Menu bar extra with recent changes
+- [x] Swift Charts price history (Iteration 24-25)
+- [x] Settings view with sync interval, notification toggles, data retention (Iteration 29)
+- [x] Menu bar extra with recent changes (Iteration 30)
 - [ ] Liquid Glass styling throughout
 - [ ] Search/filter products
-- [ ] Smart notification grouping by store/priority
+- [x] Smart notification grouping by store (Iteration 26)
+- [x] Notification priority levels (Iteration 27)
 - [ ] Keyboard shortcuts (⌘N add, ⌘R sync)
-- [ ] Snapshot retention cleanup (90 days)
+- [x] Event retention cleanup (configurable in Settings)
 
 ### Quality
 
@@ -71,7 +73,7 @@ If there's interest.
 - [ ] iOS companion app
 - [ ] iCloud sync (SwiftData + CloudKit)
 - [ ] WidgetKit widgets
-- [ ] Custom alert rules ("notify if >20% drop")
+- [x] ~~Custom alert rules ("notify if >20% drop")~~ ✅ Done as price thresholds (Iteration 30a)
 - [ ] Product favoriting/watchlists
 - [ ] Export to CSV/JSON
 - [ ] Spotlight integration
@@ -96,7 +98,8 @@ Watchify/
 │   ├── Product.swift
 │   ├── Variant.swift
 │   ├── Snapshots.swift
-│   └── ChangeEvent.swift
+│   ├── ChangeEvent.swift
+│   └── PriceThreshold.swift
 ├── Services/
 │   ├── StoreService.swift
 │   ├── SyncScheduler.swift
@@ -126,10 +129,10 @@ Watchify/
 - Activity shows history
 
 ### Phase 2
-- Price charts render
-- Menu bar shows unread changes
-- App feels polished and responsive
-- No obvious bugs
+- [x] Price charts render
+- [x] Menu bar shows unread changes
+- [ ] App feels polished and responsive
+- [ ] No obvious bugs
 
 ### Phase 3
 - Works on iPhone

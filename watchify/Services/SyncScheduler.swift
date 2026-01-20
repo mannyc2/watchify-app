@@ -30,8 +30,10 @@ final class SyncScheduler {
         return _storeService!
     }
 
-    // Config
-    var intervalMinutes: Int = 60
+    // Config - reads from UserDefaults (matches @AppStorage key in settings)
+    var intervalMinutes: Int {
+        UserDefaults.standard.integer(forKey: "syncIntervalMinutes").clamped(to: 5...1440, default: 30)
+    }
 
     // Background activity token
     @ObservationIgnored private var activityToken: NSObjectProtocol?
@@ -96,9 +98,26 @@ final class SyncScheduler {
                 }
             }
 
+            // Auto-delete old events if enabled
+            if UserDefaults.standard.bool(forKey: "autoDeleteEvents") {
+                let days = UserDefaults.standard.integer(forKey: "eventRetentionDays")
+                if days > 0,
+                   let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: Date()) {
+                    let predicate = #Predicate<ChangeEvent> { $0.occurredAt < cutoff }
+                    try? context.delete(model: ChangeEvent.self, where: predicate)
+                }
+            }
+
             lastSyncAt = Date()
         } catch {
             print("[SyncScheduler] Failed to fetch stores: \(error)")
         }
+    }
+}
+
+extension Int {
+    fileprivate func clamped(to range: ClosedRange<Int>, default defaultValue: Int) -> Int {
+        if self == 0 { return defaultValue }  // UserDefaults returns 0 if not set
+        return Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
     }
 }

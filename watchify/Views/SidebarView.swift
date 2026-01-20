@@ -15,6 +15,8 @@ enum SidebarSelection: Hashable {
 struct SidebarView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Store.addedAt, order: .reverse) private var stores: [Store]
+    @Query(filter: #Predicate<ChangeEvent> { !$0.isRead })
+    private var unreadEvents: [ChangeEvent]
     @Binding var selection: SidebarSelection?
     var onAddStore: () -> Void
 
@@ -24,6 +26,7 @@ struct SidebarView: View {
                 .tag(SidebarSelection.overview)
 
             Label("Activity", systemImage: "clock.arrow.circlepath")
+                .badge(unreadEvents.count)
                 .tag(SidebarSelection.activity)
 
             Section("Stores") {

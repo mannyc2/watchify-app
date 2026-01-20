@@ -128,10 +128,18 @@ class ChangeEvent {
     var variantTitle: String?
     var oldValue: String?
     var newValue: String?
-    var isRead: Bool
-    var magnitude: ChangeMagnitude
+    var priceChange: Decimal?      // For price changes: the delta amount
+    var isRead: Bool               // Tracks if user has seen this event (default: false)
+    var magnitude: ChangeMagnitude // small/medium/large for notification priority
     var store: Store?
 }
+```
+
+| Property | Description |
+|----------|-------------|
+| `isRead` | `false` when created, set to `true` when event row appears in ActivityView |
+| `priceChange` | Dollar amount of change (negative for drops), used by `PriceChangeIndicator` |
+| `magnitude` | Determines notification priority: small (<10%), medium (10-25%), large (>25%) |
 
 enum ChangeType: String, Codable {
     case priceDropped
@@ -173,6 +181,34 @@ enum ChangeMagnitude: String, Codable {
     case large    // > 25%
 }
 ```
+
+### PriceThreshold
+
+User setting for minimum price change notifications. Not a SwiftData model, but used with `@AppStorage`.
+
+```swift
+enum PriceThreshold: String, CaseIterable, Codable {
+    case any = "Any amount"
+    case dollars5 = "At least $5"
+    case dollars10 = "At least $10"
+    case dollars25 = "At least $25"
+    case percent10 = "At least 10%"
+    case percent25 = "At least 25%"
+
+    var minDollars: Decimal?  // For absolute thresholds
+    var minPercent: Int?      // For percentage thresholds
+
+    func isSatisfied(by change: ChangeEvent) -> Bool
+}
+```
+
+| Threshold | Check Logic |
+|-----------|-------------|
+| `any` | Always passes |
+| `dollars5/10/25` | `abs(priceChange) >= threshold` |
+| `percent10/25` | Uses `magnitude` enum as proxy (small <10%, medium 10-25%, large >25%) |
+
+**Storage keys**: `priceDropThreshold`, `priceIncreaseThreshold` (separate thresholds for drops vs increases)
 
 ## Computed Properties
 

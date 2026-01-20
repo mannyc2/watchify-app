@@ -311,4 +311,5 @@ struct SyncNotificationTests {
         #expect(changes.count == 1)
         #expect(changes.first?.changeType == .priceDropped)
     }
+
 }

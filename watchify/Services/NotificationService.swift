@@ -54,28 +54,52 @@ final class NotificationService {
     func send(for changes: [ChangeEvent]) async {
         guard !changes.isEmpty else { return }
 
+        // Check master toggle - default to true if not set
+        if UserDefaults.standard.object(forKey: "notificationsEnabled") != nil,
+           !UserDefaults.standard.bool(forKey: "notificationsEnabled") {
+            print("[NotificationService] Notifications disabled in settings")
+            return
+        }
+
         let settings = await center.notificationSettings()
         guard settings.authorizationStatus == .authorized else {
             print("[NotificationService] Not authorized to send notifications")
             return
         }
 
-        let content = UNMutableNotificationContent()
-        content.title = "Watchify"
-        content.body = formatBody(for: changes)
-        content.sound = .default
+        // Group changes by store
+        let groupedByStore = Dictionary(grouping: changes) { $0.store?.id }
 
-        let request = UNNotificationRequest(
-            identifier: UUID().uuidString,
-            content: content,
-            trigger: nil
-        )
+        for (_, storeChanges) in groupedByStore {
+            // Filter by enabled change types and threshold
+            let filteredChanges = storeChanges.filter {
+                isChangeTypeEnabled($0.changeType) && meetsThreshold($0)
+            }
+            guard !filteredChanges.isEmpty else { continue }
+            let content = UNMutableNotificationContent()
 
-        do {
-            try await center.add(request)
-            print("[NotificationService] Notification sent for \(changes.count) changes")
-        } catch {
-            print("[NotificationService] Failed to send notification: \(error)")
+            if let store = filteredChanges.first?.store {
+                content.title = store.name
+                content.threadIdentifier = store.id.uuidString
+            }
+            // If no store, leave title empty - system shows app name per HIG
+
+            content.body = formatBody(for: filteredChanges)
+            content.interruptionLevel = determinePriority(for: filteredChanges)
+            content.sound = content.interruptionLevel == .passive ? nil : .default
+
+            let request = UNNotificationRequest(
+                identifier: UUID().uuidString,
+                content: content,
+                trigger: nil
+            )
+
+            do {
+                try await center.add(request)
+                print("[NotificationService] Notification sent for \(filteredChanges.count) changes (\(content.title))")
+            } catch {
+                print("[NotificationService] Failed to send notification: \(error)")
+            }
         }
     }
 
@@ -115,5 +139,64 @@ final class NotificationService {
             counts[change.changeType, default: 0] += 1
         }
         return counts
+    }
+
+    /// Returns priority level for a single change (2 = high, 1 = normal, 0 = low).
+    private func priorityLevel(for change: ChangeEvent) -> Int {
+        switch change.changeType {
+        case .backInStock:
+            return 2
+        case .priceDropped:
+            return change.magnitude == .large ? 2 : (change.magnitude == .medium ? 1 : 0)
+        case .priceIncreased, .outOfStock, .newProduct, .productRemoved:
+            return 1
+        case .imagesChanged:
+            return 0
+        }
+    }
+
+    /// Determines the interruption level for a group of changes.
+    /// Uses highest priority: timeSensitive > active > passive
+    func determinePriority(for changes: [ChangeEvent]) -> UNNotificationInterruptionLevel {
+        let maxPriority = changes.map { priorityLevel(for: $0) }.max() ?? 0
+        switch maxPriority {
+        case 2: return .timeSensitive
+        case 1: return .active
+        default: return .passive
+        }
+    }
+
+    private func isChangeTypeEnabled(_ type: ChangeType) -> Bool {
+        let key: String
+        switch type {
+        case .priceDropped: key = "notifyPriceDropped"
+        case .priceIncreased: key = "notifyPriceIncreased"
+        case .backInStock: key = "notifyBackInStock"
+        case .outOfStock: key = "notifyOutOfStock"
+        case .newProduct: key = "notifyNewProduct"
+        case .productRemoved: key = "notifyProductRemoved"
+        case .imagesChanged: key = "notifyImagesChanged"
+        }
+        // Default to true for all except imagesChanged (default false)
+        if UserDefaults.standard.object(forKey: key) == nil {
+            return type != .imagesChanged
+        }
+        return UserDefaults.standard.bool(forKey: key)
+    }
+
+    private func meetsThreshold(_ change: ChangeEvent) -> Bool {
+        // Non-price changes always pass
+        guard change.changeType == .priceDropped || change.changeType == .priceIncreased else {
+            return true
+        }
+
+        let thresholdKey = change.changeType == .priceDropped ? "priceDropThreshold" : "priceIncreaseThreshold"
+        let thresholdRaw = UserDefaults.standard.string(forKey: thresholdKey) ?? PriceThreshold.any.rawValue
+
+        guard let threshold = PriceThreshold(rawValue: thresholdRaw) else {
+            return true
+        }
+
+        return threshold.isSatisfied(by: change)
     }
 }

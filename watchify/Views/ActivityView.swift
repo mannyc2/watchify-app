@@ -152,6 +152,14 @@ struct ActivityView: View {
 
             Spacer()
 
+            if hasUnreadEvents {
+                Button("Mark All Read") {
+                    markAllRead()
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+            }
+
             if hasActiveFilters {
                 Button("Clear") {
                     selectedStore = nil
@@ -161,6 +169,16 @@ struct ActivityView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    private var hasUnreadEvents: Bool {
+        filteredEvents.contains { !$0.isRead }
+    }
+
+    private func markAllRead() {
+        for event in filteredEvents where !event.isRead {
+            event.isRead = true
         }
     }
 

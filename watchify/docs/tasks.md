@@ -625,56 +625,162 @@ Stores
 
 ---
 
-## Iteration 26: Notification Grouping
+## Iteration 26: Notification Grouping ✅
 
 **Goal**: Smarter notifications.
 
-- [ ] Group changes by store
-- [ ] Summarize: "3 price drops, 1 back in stock"
-- [ ] Use `threadIdentifier` for grouping in NC
+- [x] Group changes by store
+- [x] Summarize: "3 price drops, 1 back in stock"
+- [x] Use `threadIdentifier` for grouping in NC
+- [x] Set `interruptionLevel = .timeSensitive` to break through Focus modes
 
-**Test**: Multiple changes → one grouped notification.
+**Implementation Notes**:
+- One notification per store - better UX and leverages native thread grouping
+- Title = store name (empty for orphan changes, system shows app name per HIG)
+- `threadIdentifier` = `store.id.uuidString` (stable, unique - names could change)
+- All notifications use `.timeSensitive` for price alerts
+
+**Files**:
+- `Services/NotificationService.swift` - Group by store, set title & threadIdentifier
+- `watchifyTests/SyncNotificationTests.swift` - 3 new grouping tests
+- `docs/services.md` - Updated documentation
+
+**Test**: Multiple changes → separate notifications per store, grouped in Notification Center. ✅
 
 ---
 
-## Iteration 27: Notification Priority
+## Iteration 27: Notification Priority ✅
 
-**Goal**: Important changes stand out.
+**Goal**: Per-notification priority based on change significance.
 
-- [ ] High priority: large price drops, back in stock
-- [ ] High → `.timeSensitive` + sound
-- [ ] Low → `.passive`, no sound
+- [x] Low priority: small price changes (<10%) → `.passive`, no sound
+- [x] Normal priority: moderate changes → `.active`, default sound
+- [x] High priority: large price drops (>25%), back in stock → `.timeSensitive` + sound
+- [x] Add Time Sensitive Notifications entitlement
 
-**Test**: Big price drop makes sound, small change doesn't.
+**Implementation Notes**:
+- `determinePriority(for:)` evaluates highest priority in a group
+- Mixed priority groups use highest applicable level
+- Entitlement added: `com.apple.developer.usernotifications.time-sensitive`
+
+**Files**:
+- `watchify.entitlements` - Added time-sensitive entitlement
+- `Services/NotificationService.swift` - Added `determinePriority(for:)` method
+- `watchifyTests/NotificationPriorityTests.swift` - 11 new priority tests
+- `docs/services.md` - Updated with priority table
+
+**Test**: Big price drop makes sound, small change is silent. ✅
 
 ---
 
-## Iteration 28: Mark as Read
+## Iteration 28: Mark as Read ✅
 
 **Goal**: Track what user has seen.
 
-- [ ] Add `isRead` toggle to ChangeEvent
-- [ ] Mark read when viewing Activity
-- [ ] Show unread count in sidebar
+- [x] `isRead` property already exists on ChangeEvent (initialized to `false`)
+- [x] Mark read when event row appears on screen (`.onAppear`)
+- [x] Show unread count badge on Activity in sidebar
+- [x] Add "Mark All Read" button in ActivityView filter bar
+- [x] Blue dot indicator for unread events in ActivityRow
 
-**Test**: New changes show as unread, viewing marks read.
+**Implementation Notes**:
+- `ActivityRow` uses `@Bindable` to allow mutation of `isRead`
+- `SidebarView` uses `@Query` with `#Predicate<ChangeEvent> { !$0.isRead }` for unread count
+- "Mark All Read" only affects currently filtered events
+- Badge automatically hides when count is 0
+
+**Files**:
+- `Views/ActivityRow.swift` - Added unread dot, mark-as-read on appear
+- `Views/SidebarView.swift` - Added unread count badge
+- `Views/ActivityView.swift` - Added "Mark All Read" button
+- `watchifyTests/ChangeEventReadTests.swift` - 5 new tests
+
+**Test**: New changes show unread dot, viewing marks read, sidebar badge decrements. ✅
 
 ---
 
-## Iteration 29: Menu Bar Extra (Basic)
+## Iteration 29: Settings View ✅
+
+**Goal**: Add standard macOS Settings window (⌘,) with sync interval, notification toggles, and data management.
+
+- [x] Create `Views/Settings/SettingsView.swift` - TabView container with General, Notifications, Data tabs
+- [x] Create `Views/Settings/GeneralSettingsTab.swift` - Sync interval with preset picker + custom option
+- [x] Create `Views/Settings/NotificationSettingsTab.swift` - Master toggle + per-change-type toggles
+- [x] Create `Views/Settings/DataSettingsTab.swift` - Auto-delete old events + manual "Clear All Events"
+- [x] Add `Settings` scene to `watchifyApp.swift` (enables ⌘, automatically)
+- [x] Update `SyncScheduler` to read interval from UserDefaults
+- [x] Update `NotificationService` to filter by enabled change types
+- [x] Add auto-delete of old events based on retention setting
+
+**Implementation Notes**:
+- Preset intervals: 15m, 30m, 1h, 2h, 4h, 8h + "Custom..." with TextField+Stepper
+- 7 notification toggles matching `ChangeType` cases (imagesChanged defaults to off)
+- Data retention: configurable days, runs cleanup after each sync
+- `@AppStorage` for all preferences
+
+**Files**:
+- `Views/Settings/SettingsView.swift`
+- `Views/Settings/GeneralSettingsTab.swift`
+- `Views/Settings/NotificationSettingsTab.swift`
+- `Views/Settings/DataSettingsTab.swift`
+- `watchifyApp.swift` - Added Settings scene
+- `Services/SyncScheduler.swift` - Read interval from UserDefaults, auto-delete
+- `Services/NotificationService.swift` - Filter by enabled change types
+
+**Test**: ⌘, opens Settings, interval changes take effect, notification toggles filter alerts, data cleanup works. ✅
+
+---
+
+## Iteration 30: Menu Bar Extra ✅
 
 **Goal**: Quick access without opening app.
 
-- [ ] Add `MenuBarExtra` to app
-- [ ] Show unread change count in icon
-- [ ] List recent changes
-- [ ] "Open App" and "Quit" buttons
+- [x] Add `MenuBarExtra` scene to `watchifyApp.swift`
+- [x] Create `UnreadCountObserver` to track unread count for dynamic icon
+- [x] Bell icon shows badge (red accent) when unread > 0
+- [x] Create `MenuBarView.swift` with header, event list, action buttons
+- [x] Create `MenuBarEventRow.swift` - compact event row for menu bar
+- [x] Shows unread events first, falls back to recent 10 if all read
+- [x] "Mark All Read" button in header
+- [x] "Open Watchify" and "Quit" buttons in footer
+- [x] Events mark as read when viewed (`.onAppear`)
+- [x] Uses `.menuBarExtraStyle(.window)` for rich content
 
-**Test**: Menu bar icon appears, shows changes.
+**Files**:
+- `Views/MenuBar/MenuBarView.swift` - Main menu bar content
+- `Views/MenuBar/MenuBarEventRow.swift` - Compact event row
+- `watchifyApp.swift` - Added MenuBarExtra scene + UnreadCountObserver
+
+**Test**: Menu bar icon appears, shows changes, marks read on view, actions work. ✅
 
 ---
 
-## Iteration 30: Liquid Glass - Cards
+## Iteration 30a: Price Threshold Notifications ✅
+
+**Goal**: Allow users to set minimum price change thresholds for notifications.
+
+- [x] Create `Models/PriceThreshold.swift` enum with preset thresholds
+- [x] Add threshold pickers to `NotificationSettingsTab` below price toggles
+- [x] Add `meetsThreshold()` filter in `NotificationService.send()`
+- [x] Support both absolute ($5, $10, $25) and percentage (10%, 25%) thresholds
+- [x] Use `ChangeMagnitude` as proxy for percentage thresholds
+
+**Implementation Notes**:
+- `PriceThreshold` enum with `isSatisfied(by:)` method
+- Separate thresholds for price drops vs increases
+- Non-price changes (back in stock, etc.) always pass through
+- Default: "Any amount" (backwards compatible)
+
+**Files**:
+- `Models/PriceThreshold.swift` - Threshold enum with logic
+- `Views/Settings/NotificationSettingsTab.swift` - Added threshold pickers
+- `Services/NotificationService.swift` - Added `meetsThreshold()` filter
+
+**Test**: Set threshold to $10, sync with $5 drop → no notification. Sync with $15 drop → notification. ✅
+
+---
+
+## Iteration 31: Liquid Glass - Cards
 
 **Goal**: Apply glass styling.
 
@@ -686,7 +792,7 @@ Stores
 
 ---
 
-## Iteration 31: Liquid Glass - Activity
+## Iteration 32: Liquid Glass - Activity
 
 **Goal**: Grouped glass in activity.
 
@@ -698,7 +804,7 @@ Stores
 
 ---
 
-## Iteration 32: Liquid Glass - Toolbar
+## Iteration 33: Liquid Glass - Toolbar
 
 **Goal**: Glass toolbar buttons.
 
@@ -706,19 +812,6 @@ Stores
 - [ ] Verify appearance
 
 **Test**: Toolbar looks cohesive.
-
----
-
-## Iteration 33: Settings View
-
-**Goal**: User preferences.
-
-- [ ] Create `SettingsView.swift`
-- [ ] Sync interval setting
-- [ ] Notification preferences (on/off, sound)
-- [ ] Use `@AppStorage` for persistence
-
-**Test**: Change settings, verify they persist and take effect.
 
 ---
 
@@ -829,9 +922,10 @@ Stores
 | 20-24 | Product UI polish |
 | 25 | Charts |
 | 26-28 | Notification improvements |
-| 29 | Menu bar |
-| 30-32 | Liquid Glass |
-| 33-38 | Settings, search, polish |
+| 29 | Settings |
+| 30 | Menu bar |
+| 31-33 | Liquid Glass |
+| 34-38 | Search, cleanup, polish |
 | 39 | Ship |
 
 Each iteration builds on the last. You always have a working app—just with fewer features.
