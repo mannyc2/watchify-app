@@ -5,11 +5,11 @@
 
 import Foundation
 
-struct ShopifyProductsResponse: Codable {
+struct ShopifyProductsResponse: Sendable, Codable {
     let products: [ShopifyProduct]
 }
 
-struct ShopifyProduct: Codable {
+struct ShopifyProduct: Sendable, Codable {
     let id: Int64
     let title: String
     let handle: String
@@ -46,11 +46,11 @@ struct ShopifyProduct: Codable {
     }
 }
 
-struct ShopifyImage: Codable {
+struct ShopifyImage: Sendable, Codable {
     let src: String
 }
 
-struct ShopifyVariant: Codable {
+struct ShopifyVariant: Sendable, Codable {
     let id: Int64
     let title: String
     let sku: String?

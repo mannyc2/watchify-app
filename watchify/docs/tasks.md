@@ -288,41 +288,76 @@ Small, working increments. Each iteration should be completable in 1-3 hours and
 
 ---
 
-## Iteration 17: Local Notifications (Basic)
+## Iteration 17: Local Notifications (Basic) ✅
 
 **Goal**: Get notified of changes.
 
-- [ ] Create `Services/NotificationService.swift`
-- [ ] Request permission on first launch
-- [ ] Send notification when changes detected
-- [ ] Simple: one notification per sync with change count
+- [x] Create `Services/NotificationService.swift`
+- [x] Request permission contextually (Apple HIG best practice)
+- [x] Send notification when changes detected
+- [x] Simple: one notification per sync with change count
+
+**Implementation Notes**:
+- Permission is requested contextually when first changes are detected (not on app launch per Apple HIG)
+- `authorizationStatus()` - check status without prompting
+- `requestPermissionIfNeeded()` - only prompts if `.notDetermined`
+- `sendIfAuthorized(for:)` - requests permission if needed, then sends
+- `StoreService.syncStore()` calls `sendIfAuthorized()` when changes detected
 
 **Test**: Sync finds changes, notification appears.
 
 ---
 
-## Iteration 18: Background Sync Timer
+## Iteration 18: Background Sync Timer ✅
 
 **Goal**: Auto-sync periodically.
 
-- [ ] Create `Services/SyncScheduler.swift`
-- [ ] Start timer on app launch (60 min default)
-- [ ] Sync all stores when timer fires
-- [ ] Track `isSyncing` to prevent overlap
+- [x] Create `Services/SyncScheduler.swift`
+- [x] Start timer on app launch (60 min default)
+- [x] Sync all stores when timer fires
+- [x] Track `isSyncing` to prevent overlap
 
 **Test**: Set timer to 1 min for testing, see auto-syncs.
 
 ---
 
-## Iteration 19: Rate Limiting
+## Iteration 19: Rate Limiting ✅
 
 **Goal**: Be polite to Shopify.
 
-- [ ] Track last fetch time per store
-- [ ] Enforce 60s minimum between fetches
-- [ ] Return error if rate limited (don't just skip silently)
+- [x] Track last fetch time per store
+- [x] Enforce 60s minimum between fetches
+- [x] Return error if rate limited (don't just skip silently)
 
 **Test**: Spam sync button, get rate limit feedback.
+
+---
+
+## Iteration 19a: Rate Limit UX (Apple HIG) ✅
+
+**Goal**: Replace blocking alert with inline, non-disruptive status view.
+
+- [x] Enrich `SyncError` with `failureReason` and `recoverySuggestion` per Apple's LocalizedError guidance
+- [x] Create `SyncStatusView.swift` - inline component with countdown timer, retry button, dismiss button
+- [x] Use `.ultraThinMaterial` for native macOS glass effect
+- [x] Update `StoreDetailView` to show inline status for rate limits (alerts for other errors)
+- [x] Add smooth transition animation for status appearance
+- [x] Proper accessibility label for VoiceOver
+- [x] Timer cleanup on view disappear
+- [x] Add tests for enriched error properties
+- [x] **Polish**: Add `Status` enum with `.waiting(seconds:)` and `.ready` cases
+- [x] **Polish**: Transition to ready state when countdown hits 0 (icon: clock → checkmark.circle green)
+- [x] **Polish**: Change copy from "Wait Xs..." → "You can sync now."
+- [x] **Polish**: Post macOS accessibility announcement when ready
+- [x] **Polish**: Auto-dismiss after 8 seconds in ready state
+
+**Files**:
+- `Services/StoreService.swift` - enriched `SyncError` enum
+- `Views/SyncStatusView.swift` - inline status component with state machine
+- `Views/StoreDetailView.swift` - inline status integration
+- `watchifyTests/StoreServiceTests.swift` - new error property tests
+
+**Test**: Sync button spammed → inline status with countdown appears, retry enables at 0, non-rate-limit errors still show as alerts.
 
 ---
 
@@ -580,7 +615,7 @@ Small, working increments. Each iteration should be completable in 1-3 hours and
 | 6-10 | Shopify fetch + persist |
 | 11-12 | Basic product display |
 | 13-16 | Change detection + history |
-| 17-19 | Notifications + background sync |
+| 17-19a | Notifications + background sync + rate limit UX |
 | 20-24 | Product UI polish |
 | 25 | Charts |
 | 26-28 | Notification improvements |

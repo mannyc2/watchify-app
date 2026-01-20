@@ -6,6 +6,39 @@
 import Foundation
 import SwiftData
 
+enum SyncError: Error, LocalizedError {
+    case storeNotFound
+    case rateLimited(retryAfter: TimeInterval)
+
+    var errorDescription: String? {
+        switch self {
+        case .storeNotFound:
+            return String(localized: "Store not found")
+        case .rateLimited:
+            return String(localized: "Sync limited")
+        }
+    }
+
+    var failureReason: String? {
+        switch self {
+        case .storeNotFound:
+            return String(localized: "We couldn't find a store with that address.")
+        case .rateLimited(let seconds):
+            let rounded = Int(seconds.rounded(.up))
+            return String(localized: "Please wait \(rounded) seconds before syncing again.")
+        }
+    }
+
+    var recoverySuggestion: String? {
+        switch self {
+        case .storeNotFound:
+            return String(localized: "Check the domain and try again.")
+        case .rateLimited:
+            return String(localized: "Try again after the countdown completes.")
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class StoreService {
@@ -31,14 +64,21 @@ final class StoreService {
         return store
     }
 
-    func syncStore(_ store: Store, context: ModelContext) async throws {
+    @discardableResult
+    func syncStore(_ store: Store, context: ModelContext) async throws -> [ChangeEvent] {
+        // Rate limit check: 60s minimum between syncs
+        let minInterval: TimeInterval = 60
+        if let lastFetch = store.lastFetchedAt {
+            let elapsed = Date().timeIntervalSince(lastFetch)
+            if elapsed < minInterval {
+                throw SyncError.rateLimited(retryAfter: minInterval - elapsed)
+            }
+        }
+
         let shopifyProducts = try await api.fetchProducts(domain: store.domain)
         let changes = saveProducts(shopifyProducts, to: store, context: context, isInitialImport: false)
         store.lastFetchedAt = Date()
-
-        if !changes.isEmpty {
-            print("[StoreService] Detected \(changes.count) changes")
-        }
+        return changes
     }
 
     @discardableResult

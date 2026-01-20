@@ -12,7 +12,8 @@ struct StoreDetailView: View {
 
     @Query private var products: [Product]
     @State private var isSyncing = false
-    @State private var syncError: Error?
+    @State private var rateLimitRetryAfter: TimeInterval?
+    @State private var otherError: Error?
 
     private let storeService = StoreService()
 
@@ -27,22 +28,48 @@ struct StoreDetailView: View {
         )
     }
 
+    // MARK: - Known Issue: NSTableView Reentrancy Warning
+    //
+    // When navigating to this view, macOS may log:
+    //   "WARNING: Application performed a reentrant operation in its NSTableView delegate"
+    //
+    // Root cause: SwiftUI's List uses NSOutlineView internally. During initial setup,
+    // OutlineListCoordinator.configTableView() calls setDataSource:, which triggers
+    // reloadData → _tileAndRedisplayAll → setFrameSize: → tile() while reloadData
+    // is still on the call stack. This is an internal SwiftUI/AppKit issue.
+    //
+    // The warning is cosmetic and doesn't affect functionality. Apple may fix this
+    // in a future SwiftUI update.
+
     var body: some View {
-        Group {
-            if products.isEmpty {
-                ContentUnavailableView {
-                    Label("No Products", systemImage: "tray")
-                } description: {
-                    Text("This store has no products, or they haven't been synced yet.")
-                } actions: {
-                    Button("Sync Now") {
-                        Task { await sync() }
+        VStack(spacing: 0) {
+            if let retryAfter = rateLimitRetryAfter {
+                SyncStatusView(
+                    retryAfter: retryAfter,
+                    onRetry: { Task { await sync() } },
+                    onDismiss: { rateLimitRetryAfter = nil }
+                )
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+
+            Group {
+                if products.isEmpty {
+                    ContentUnavailableView {
+                        Label("No Products", systemImage: "tray")
+                    } description: {
+                        Text("This store has no products, or they haven't been synced yet.")
+                    } actions: {
+                        Button("Sync Now") {
+                            Task { await sync() }
+                        }
+                        .disabled(isSyncing)
                     }
-                    .disabled(isSyncing)
-                }
-            } else {
-                List(products) { product in
-                    ProductRow(product: product)
+                } else {
+                    List(products) { product in
+                        ProductRow(product: product)
+                    }
                 }
             }
         }
@@ -62,23 +89,29 @@ struct StoreDetailView: View {
                 .disabled(isSyncing)
             }
         }
-        .alert("Sync Failed", isPresented: .constant(syncError != nil)) {
-            Button("OK") { syncError = nil }
+        .alert("Sync Failed", isPresented: .constant(otherError != nil)) {
+            Button("OK") { otherError = nil }
         } message: {
-            if let error = syncError {
+            if let error = otherError {
                 Text(error.localizedDescription)
             }
         }
     }
 
     private func sync() async {
+        rateLimitRetryAfter = nil
         isSyncing = true
         defer { isSyncing = false }
 
         do {
-            try await storeService.syncStore(store, context: modelContext)
+            let changes = try await storeService.syncStore(store, context: modelContext)
+            await NotificationService.shared.send(for: changes)
+        } catch let error as SyncError {
+            if case .rateLimited(let retryAfter) = error {
+                withAnimation { rateLimitRetryAfter = retryAfter }
+            }
         } catch {
-            syncError = error
+            otherError = error
         }
     }
 }

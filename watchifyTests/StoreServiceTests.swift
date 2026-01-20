@@ -17,6 +17,7 @@ extension Tag {
     @Tag static var productLifecycle: Self
     @Tag static var errorHandling: Self
     @Tag static var variantSnapshots: Self
+    @Tag static var rateLimiting: Self
 }
 
 // MARK: - Test Suite
@@ -38,7 +39,7 @@ struct StoreServiceTests {
             let schema = Schema([Store.self, Product.self, Variant.self, VariantSnapshot.self, ChangeEvent.self])
             let config = ModelConfiguration(isStoredInMemoryOnly: true)
             self.container = try ModelContainer(for: schema, configurations: config)
-            self.context = ModelContext(container)
+            self.context = container.mainContext  // Use mainContext to see actor's saved changes
             self.mockAPI = MockShopifyAPI()
             self.service = StoreService(api: mockAPI)
         }
@@ -51,6 +52,12 @@ struct StoreServiceTests {
         ) async throws -> Store {
             await mockAPI.setProducts(products)
             return try await service.addStore(name: name, domain: domain, context: context)
+        }
+
+        /// Prepares a store for sync testing by clearing rate limit.
+        /// Call this before syncStore() in tests that need immediate sync.
+        func clearRateLimit(for store: Store) {
+            store.lastFetchedAt = Date.distantPast
         }
     }
 
@@ -108,7 +115,8 @@ struct StoreServiceTests {
         let product = ShopifyProduct.mock(id: 1, title: "Test Product")
         let store = try await ctx.addStore(products: [product])
 
-        // Sync immediately - nothing changed
+        // Clear rate limit and sync - nothing changed
+        ctx.clearRateLimit(for: store)
         try await ctx.service.syncStore(store, context: ctx.context)
 
         try expectEventCount(0, in: ctx.context)
@@ -131,6 +139,7 @@ struct StoreServiceTests {
         await ctx.mockAPI.setProducts([
             .mock(id: 1, title: "Test Product", variants: [.mock(id: 100, price: 80.00)])
         ])
+        ctx.clearRateLimit(for: store)
         try await ctx.service.syncStore(store, context: ctx.context)
 
         let events = try fetchEvents(from: ctx.context)
@@ -155,6 +164,7 @@ struct StoreServiceTests {
         await ctx.mockAPI.setProducts([
             .mock(id: 1, title: "Test Product", variants: [.mock(id: 100, price: 130.00)])
         ])
+        ctx.clearRateLimit(for: store)
         try await ctx.service.syncStore(store, context: ctx.context)
 
         let events = try fetchEvents(from: ctx.context)
@@ -179,6 +189,7 @@ struct StoreServiceTests {
         await ctx.mockAPI.setProducts([
             .mock(id: 1, title: "Test Product", variants: [.mock(id: 100, available: true)])
         ])
+        ctx.clearRateLimit(for: store)
         try await ctx.service.syncStore(store, context: ctx.context)
 
         try expectEvent(type: .backInStock, in: ctx.context)
@@ -199,6 +210,7 @@ struct StoreServiceTests {
         await ctx.mockAPI.setProducts([
             .mock(id: 1, title: "Test Product", variants: [.mock(id: 100, available: false)])
         ])
+        ctx.clearRateLimit(for: store)
         try await ctx.service.syncStore(store, context: ctx.context)
 
         try expectEvent(type: .outOfStock, in: ctx.context)
@@ -219,6 +231,7 @@ struct StoreServiceTests {
             product1,
             .mock(id: 2, title: "Product 2", handle: "product-2")
         ])
+        ctx.clearRateLimit(for: store)
         try await ctx.service.syncStore(store, context: ctx.context)
 
         let events = try fetchEvents(from: ctx.context)
@@ -238,6 +251,7 @@ struct StoreServiceTests {
 
         // Remove product 2
         await ctx.mockAPI.setProducts([product1])
+        ctx.clearRateLimit(for: store)
         try await ctx.service.syncStore(store, context: ctx.context)
 
         try expectEvent(type: .productRemoved, in: ctx.context)
@@ -273,6 +287,7 @@ struct StoreServiceTests {
                 .mock(id: 101, title: "Large", price: 60.00, available: false)
             ])
         ])
+        ctx.clearRateLimit(for: store)
         try await ctx.service.syncStore(store, context: ctx.context)
 
         try expectEventCount(3, in: ctx.context)
@@ -290,7 +305,8 @@ struct StoreServiceTests {
 
         let store = try await ctx.addStore(products: [.mock(id: 1)])
 
-        // Simulate API error on next sync
+        // Clear rate limit and simulate API error on next sync
+        ctx.clearRateLimit(for: store)
         await ctx.mockAPI.setShouldThrow(true)
 
         await #expect(throws: URLError.self) {
@@ -314,6 +330,104 @@ struct StoreServiceTests {
                 domain: "non-existent.myshopify.com",
                 context: ctx.context
             )
+        }
+    }
+
+    // MARK: - Rate Limiting Tests
+
+    @Test("Rate limiting prevents sync within 60 seconds", .tags(.rateLimiting, .errorHandling))
+    @MainActor
+    func rateLimitingPreventsSyncWithin60Seconds() async throws {
+        let ctx = try TestContext()
+
+        // addStore sets lastFetchedAt to now
+        let store = try await ctx.addStore(products: [.mock(id: 1)])
+
+        // Immediate sync should be rate limited
+        await #expect(throws: SyncError.self) {
+            try await ctx.service.syncStore(store, context: ctx.context)
+        }
+    }
+
+    @Test("Rate limiting allows sync after 60 seconds", .tags(.rateLimiting))
+    @MainActor
+    func rateLimitingAllowsSyncAfter60Seconds() async throws {
+        let ctx = try TestContext()
+
+        let store = try await ctx.addStore(products: [.mock(id: 1)])
+
+        // Manually set lastFetchedAt to 61 seconds ago
+        store.lastFetchedAt = Date().addingTimeInterval(-61)
+
+        // Sync should succeed
+        let changes = try await ctx.service.syncStore(store, context: ctx.context)
+        #expect(changes.isEmpty)  // No changes since products unchanged
+    }
+
+    @Test("Rate limit error includes retry time", .tags(.rateLimiting, .errorHandling))
+    @MainActor
+    func rateLimitErrorIncludesRetryTime() async throws {
+        let ctx = try TestContext()
+
+        let store = try await ctx.addStore(products: [.mock(id: 1)])
+
+        // Set lastFetchedAt to 30 seconds ago (should need to wait ~30 more seconds)
+        store.lastFetchedAt = Date().addingTimeInterval(-30)
+
+        do {
+            try await ctx.service.syncStore(store, context: ctx.context)
+            Issue.record("Expected SyncError.rateLimited to be thrown")
+        } catch let error as SyncError {
+            if case .rateLimited(let retryAfter) = error {
+                // Should be approximately 30 seconds (allowing some timing variance)
+                #expect(retryAfter > 25 && retryAfter <= 30)
+                #expect(error.failureReason?.contains("wait") == true)
+            } else {
+                Issue.record("Expected SyncError.rateLimited, got \(error)")
+            }
+        }
+    }
+
+    @Test("SyncError.rateLimited has correct LocalizedError properties", .tags(.rateLimiting, .errorHandling))
+    @MainActor
+    func rateLimitedErrorHasLocalizedProperties() async throws {
+        let error = SyncError.rateLimited(retryAfter: 45)
+
+        #expect(error.errorDescription == "Sync limited")
+        #expect(error.failureReason == "Please wait 45 seconds before syncing again.")
+        #expect(error.recoverySuggestion == "Try again after the countdown completes.")
+    }
+
+    @Test("SyncError.storeNotFound has correct LocalizedError properties", .tags(.errorHandling))
+    @MainActor
+    func storeNotFoundErrorHasLocalizedProperties() async throws {
+        let error = SyncError.storeNotFound
+
+        #expect(error.errorDescription == "Store not found")
+        #expect(error.failureReason == "We couldn't find a store with that address.")
+        #expect(error.recoverySuggestion == "Check the domain and try again.")
+    }
+
+    @Test("First sync after addStore is rate limited", .tags(.rateLimiting))
+    @MainActor
+    func firstSyncAfterAddStoreIsRateLimited() async throws {
+        let ctx = try TestContext()
+
+        // This is the expected behavior: addStore sets lastFetchedAt,
+        // so subsequent manual sync should wait
+        let store = try await ctx.addStore(products: [.mock(id: 1)])
+        #expect(store.lastFetchedAt != nil)
+
+        do {
+            try await ctx.service.syncStore(store, context: ctx.context)
+            Issue.record("Expected rate limit error")
+        } catch let error as SyncError {
+            if case .rateLimited(let retryAfter) = error {
+                // Should be close to 60 seconds
+                #expect(retryAfter > 55 && retryAfter <= 60)
+            } else {
+                Issue.record("Expected SyncError.rateLimited")
+            }
         }
     }
 

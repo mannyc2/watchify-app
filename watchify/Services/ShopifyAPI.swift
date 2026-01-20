@@ -9,9 +9,8 @@ protocol ShopifyAPIProtocol: Sendable {
     func fetchProducts(domain: String) async throws -> [ShopifyProduct]
 }
 
-actor ShopifyAPI: ShopifyAPIProtocol {
+struct ShopifyAPI: ShopifyAPIProtocol {
     private let session: URLSession
-    private let decoder: JSONDecoder
 
     init() {
         let config = URLSessionConfiguration.default
@@ -19,9 +18,6 @@ actor ShopifyAPI: ShopifyAPIProtocol {
             "Accept": "application/json"
         ]
         self.session = URLSession(configuration: config)
-
-        self.decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
     }
 
     func fetchProducts(domain: String) async throws -> [ShopifyProduct] {
@@ -29,7 +25,8 @@ actor ShopifyAPI: ShopifyAPIProtocol {
         var page = 1
 
         while true {
-            guard let url = URL(string: "https://\(domain)/products.json?limit=250&page=\(page)") else {
+            guard let url = URL(string: "https://\(domain)/products.json?limit=250&page=\(page)")
+            else {
                 throw ShopifyAPIError.invalidResponse
             }
 
@@ -43,6 +40,8 @@ actor ShopifyAPI: ShopifyAPIProtocol {
                 throw ShopifyAPIError.httpError(statusCode: httpResponse.statusCode)
             }
 
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
             let result = try decoder.decode(ShopifyProductsResponse.self, from: data)
 
             if result.products.isEmpty {
