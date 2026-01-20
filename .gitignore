@@ -1,0 +1,25 @@
+# Build artifacts
+build/
+DerivedData/
+
+# User-specific data
+*.xcuserstate
+xcuserdata/
+
+# Swift Package Manager
+.build/
+.swiftpm/xcode/package.xcworkspace/xcuserdata/
+
+# System files
+.DS_Store
+
+# Sensitive data
+.env
+*.secret
+
+# Local tooling configs
+.claude/
+.xcede/
+.xcrc
+.zed/
+buildServer.json
