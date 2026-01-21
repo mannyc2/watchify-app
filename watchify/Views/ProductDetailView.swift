@@ -49,12 +49,14 @@ struct ProductDetailView: View {
                     ShareLink(item: url) {
                         Label("Share", systemImage: "square.and.arrow.up")
                     }
+                    .buttonStyle(.glass)
 
                     Button {
                         NSWorkspace.shared.open(url)
                     } label: {
                         Label("Open in Browser", systemImage: "globe")
                     }
+                    .buttonStyle(.glass)
                 }
             }
         }

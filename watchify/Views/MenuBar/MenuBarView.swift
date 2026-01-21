@@ -37,9 +37,8 @@ struct MenuBarView: View {
                     Button("Mark All Read") {
                         markAllRead()
                     }
-                    .buttonStyle(.plain)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .buttonStyle(.glass)
+                    .controlSize(.small)
                 }
             }
             .padding(.horizontal)
@@ -81,16 +80,15 @@ struct MenuBarView: View {
                     openWindow(id: "main")
                     NSApp.activate(ignoringOtherApps: true)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.glass)
 
                 Button("Quit") {
                     NSApplication.shared.terminate(nil)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.glass)
             }
             .padding(.horizontal)
             .padding(.vertical, 10)
-            .background(.regularMaterial)
         }
         .frame(width: 340, height: 400)
     }

@@ -43,8 +43,7 @@ struct SidebarView: View {
                 Button { onAddStore() } label: {
                     Label("Add Store", systemImage: "plus")
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .buttonStyle(.glass)
             }
         }
         .navigationTitle("Watchify")

@@ -120,7 +120,7 @@ struct StoreDetailView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.regularMaterial)
+        .background(.bar)
     }
 
     private var syncButton: some View {
@@ -134,6 +134,7 @@ struct StoreDetailView: View {
                 Label("Sync", systemImage: "arrow.trianglehead.2.clockwise")
             }
         }
+        .buttonStyle(.glass)
         .disabled(isSyncing)
     }
 

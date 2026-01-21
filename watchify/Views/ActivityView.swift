@@ -107,18 +107,22 @@ struct ActivityView: View {
                         description: Text(emptyStateMessage)
                     )
                 } else {
-                    List {
-                        ForEach(groupedEvents, id: \.date) { group in
-                            Section {
-                                ForEach(group.events) { event in
-                                    ActivityRow(event: event)
+                    ScrollView {
+                        LazyVStack(spacing: 16) {
+                            ForEach(groupedEvents, id: \.date) { group in
+                                ActivityDateSection(title: sectionHeader(for: group.date)) {
+                                    ForEach(group.events) { event in
+                                        ActivityRow(event: event)
+                                        if event.id != group.events.last?.id {
+                                            Divider()
+                                                .padding(.leading, 52)
+                                        }
+                                    }
                                 }
-                            } header: {
-                                Text(sectionHeader(for: group.date))
                             }
                         }
+                        .padding()
                     }
-                    .listStyle(.plain)
                 }
             }
             .frame(maxHeight: .infinity)
@@ -156,8 +160,7 @@ struct ActivityView: View {
                 Button("Mark All Read") {
                     markAllRead()
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .buttonStyle(.glass)
             }
 
             if hasActiveFilters {
@@ -166,8 +169,7 @@ struct ActivityView: View {
                     selectedType = .all
                     dateRange = .all
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .buttonStyle(.glass)
             }
         }
     }
@@ -203,6 +205,43 @@ struct ActivityView: View {
         } else {
             return date.formatted(.dateTime.month(.wide).day().year())
         }
+    }
+}
+
+// MARK: - Activity Date Section
+
+/// Groups events by date with material background.
+/// Glass is used sparingly for the date pill badge only.
+struct ActivityDateSection<Content: View>: View {
+    let title: String
+    let content: Content
+
+    init(title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Date header as glass pill (good use of glass for small badge)
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .glassPill()
+
+            // Events container
+            VStack(spacing: 0) {
+                content
+            }
+            .padding(.vertical, 4)
+        }
+        .padding(12)
+        .background(
+            .regularMaterial,
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+        )
     }
 }
 

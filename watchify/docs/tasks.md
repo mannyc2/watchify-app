@@ -780,38 +780,55 @@ Stores
 
 ---
 
-## Iteration 31: Liquid Glass - Cards
+## Iteration 31-33: Liquid Glass Design System ✅
 
-**Goal**: Apply glass styling.
+**Goal**: Adopt Apple's Liquid Glass design language correctly based on WWDC25 guidance.
 
-- [ ] Add `.glassEffect()` to ProductCard
-- [ ] Add hover state with `.interactive()`
-- [ ] Test appearance
+### Key Learnings (from research)
 
-**Test**: Cards have glass effect, respond to hover.
+1. **Glass as background surface**: Never apply `.glassEffect()` directly to content—use `compositingGroup()` + `.background { Color.clear.glassEffect(...) }` to avoid vibrancy washing out content
+2. **Interactive requires controls**: `.interactive()` only provides press feedback on `Button`/`NavigationLink`, not `onTapGesture`
+3. **Hover is manual**: Glass doesn't provide automatic hover—add `@State var isHovering` + `.onHover` + border/shadow changes
+4. **GlassEffectContainer for clusters only**: Don't wrap large grids—only use for small badge/control clusters
+5. **Materials for content-heavy views**: Use `.regularMaterial` instead of glass for cards with lots of content
 
----
+### Iteration 33: Glass Theme Foundation ✅
 
-## Iteration 32: Liquid Glass - Activity
+- [x] Create `Views/GlassTheme.swift` with helper extensions
+- [x] `glassSurface(_:in:)` - glass as background, content unaffected
+- [x] `interactiveGlassSurface(in:)` - interactive glass background
+- [x] `glassPill(_:)` - for small badges/labels
+- [x] `interactiveGlassCard(isHovering:cornerRadius:)` - cards with hover effects
+- [x] Apply `.buttonStyle(.glass)` to toolbar buttons (Sync, Add Store)
 
-**Goal**: Grouped glass in activity.
+**Files**: `Views/GlassTheme.swift`, `Views/SidebarView.swift`, `Views/StoreDetailView.swift`
 
-- [ ] Group events by date
-- [ ] Use `.glassEffectUnion()` for same-day events
-- [ ] Style date headers
+### Iteration 32: Activity & Menu Bar ✅
 
-**Test**: Activity has cohesive glass groups.
+- [x] `ActivityDateSection` uses `.regularMaterial` for card (not glass—too content-heavy)
+- [x] Date header pill uses `.glassPill()` (good use case—small badge)
+- [x] Menu bar buttons use `.buttonStyle(.glass)`
+- [x] Removed `GlassEffectContainer` from grids (wrong usage per Apple docs)
 
----
+**Files**: `Views/ActivityView.swift`, `Views/MenuBar/MenuBarView.swift`
 
-## Iteration 33: Liquid Glass - Toolbar
+### Iteration 31: Cards with Hover ✅
 
-**Goal**: Glass toolbar buttons.
+- [x] `StoreCard` converted from `onTapGesture` to `Button` (enables press feedback)
+- [x] `StoreCard` uses `interactiveGlassCard(isHovering:cornerRadius:)` with manual hover state
+- [x] `ProductCard` (already `NavigationLink`) uses same glass card helper with hover
+- [x] Hover effects: border opacity `0.10 → 0.22`, shadow radius `3 → 6`
+- [x] Smooth animation via `.animation(.snappy(duration: 0.18), value: isHovering)`
+- [x] Removed `GlassEffectContainer` wrappers from `OverviewView` and `StoreDetailView` grids
 
-- [ ] Apply `.buttonStyle(.glass)` to toolbar buttons
-- [ ] Verify appearance
+**Files**: `Views/StoreCard.swift`, `Views/ProductCard.swift`, `Views/OverviewView.swift`, `Views/StoreDetailView.swift`
 
-**Test**: Toolbar looks cohesive.
+### Documentation ✅
+
+- [x] Added comprehensive "Liquid Glass" section to `CLAUDE.md` with guidelines
+- [x] Deleted outdated `docs/iteration-31-33-plan.md` (approach was wrong)
+
+**Test**: Cards show glass background, hover changes border/shadow, press feedback works on Button/NavigationLink, content (images, text) remains crisp and visible. ✅
 
 ---
 

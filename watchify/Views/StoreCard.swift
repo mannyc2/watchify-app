@@ -3,6 +3,11 @@ import SwiftUI
 
 struct StoreCard: View {
     let store: Store
+    let onSelect: () -> Void
+
+    @State private var isHovering = false
+
+    private let cornerRadius: CGFloat = 16
 
     private var productCount: Int {
         store.products.filter { !$0.isRemoved }.count
@@ -17,90 +22,94 @@ struct StoreCard: View {
 
     private var recentEvents: [ChangeType: Int] {
         let cutoff = Date().addingTimeInterval(-24 * 60 * 60)
-        return Dictionary(grouping: store.changeEvents.filter { $0.occurredAt > cutoff }) { $0.changeType }
-            .mapValues { $0.count }
+        return Dictionary(grouping: store.changeEvents.filter { $0.occurredAt > cutoff }) {
+            $0.changeType
+        }
+        .mapValues { $0.count }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Side-by-side images
-            HStack(spacing: 4) {
-                if previewImages.isEmpty {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(.fill.tertiary)
-                        .aspectRatio(3, contentMode: .fit)
-                        .overlay {
-                            Image(systemName: "photo.on.rectangle")
-                                .font(.largeTitle)
-                                .foregroundStyle(.quaternary)
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+
+        Button(action: onSelect) {
+            VStack(alignment: .leading, spacing: 12) {
+                // Side-by-side images
+                HStack(spacing: 4) {
+                    if previewImages.isEmpty {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(.fill.tertiary)
+                            .aspectRatio(3, contentMode: .fit)
+                            .overlay {
+                                Image(systemName: "photo.on.rectangle")
+                                    .font(.largeTitle)
+                                    .foregroundStyle(.quaternary)
+                            }
+                    } else {
+                        ForEach(previewImages, id: \.self) { url in
+                            AsyncImage(url: url) { image in
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                            } placeholder: {
+                                Rectangle()
+                                    .fill(.fill.tertiary)
+                            }
+                            .frame(minWidth: 0, maxWidth: .infinity)
+                            .aspectRatio(1, contentMode: .fit)
+                            .clipped()
                         }
-                } else {
-                    ForEach(previewImages, id: \.self) { url in
-                        AsyncImage(url: url) { image in
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        } placeholder: {
-                            Rectangle()
-                                .fill(.fill.tertiary)
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                // Store info + badges
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(store.name)
+                            .font(.headline)
+                            .lineLimit(1)
+
+                        Text("\(productCount) products")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    // Badges for recent events (last 24h)
+                    HStack(spacing: 6) {
+                        if let drops = recentEvents[.priceDropped], drops > 0 {
+                            Badge(
+                                text: "\(drops)",
+                                icon: ChangeType.priceDropped.icon,
+                                color: ChangeType.priceDropped.color
+                            )
                         }
-                        .frame(minWidth: 0, maxWidth: .infinity)
-                        .aspectRatio(1, contentMode: .fit)
-                        .clipped()
+                        if let stock = recentEvents[.backInStock], stock > 0 {
+                            Badge(
+                                text: "\(stock)",
+                                icon: ChangeType.backInStock.icon,
+                                color: ChangeType.backInStock.color
+                            )
+                        }
+                        if let new = recentEvents[.newProduct], new > 0 {
+                            Badge(
+                                text: "\(new)",
+                                icon: ChangeType.newProduct.icon,
+                                color: ChangeType.newProduct.color
+                            )
+                        }
                     }
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-            // Store info + badges
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(store.name)
-                        .font(.headline)
-                        .lineLimit(1)
-
-                    Text("\(productCount) products")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                // Badges for recent events (last 24h)
-                HStack(spacing: 6) {
-                    if let drops = recentEvents[.priceDropped], drops > 0 {
-                        Badge(
-                            text: "\(drops)",
-                            icon: ChangeType.priceDropped.icon,
-                            color: ChangeType.priceDropped.color
-                        )
-                    }
-                    if let stock = recentEvents[.backInStock], stock > 0 {
-                        Badge(
-                            text: "\(stock)",
-                            icon: ChangeType.backInStock.icon,
-                            color: ChangeType.backInStock.color
-                        )
-                    }
-                    if let new = recentEvents[.newProduct], new > 0 {
-                        Badge(
-                            text: "\(new)",
-                            icon: ChangeType.newProduct.icon,
-                            color: ChangeType.newProduct.color
-                        )
-                    }
-                }
-            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(12)
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(.white.opacity(0.2), lineWidth: 1)
-        }
-        .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
-        .contentShape(RoundedRectangle(cornerRadius: 16))
+        .buttonStyle(.plain)
+        .contentShape(shape)
+        .interactiveGlassCard(isHovering: isHovering, cornerRadius: cornerRadius)
+        .onHover { isHovering = $0 }
+        .animation(.snappy(duration: 0.18), value: isHovering)
     }
 }
 
@@ -111,7 +120,7 @@ struct StoreCard: View {
     let store = Store(name: "New Store", domain: "newstore.com")
     container.mainContext.insert(store)
 
-    return StoreCard(store: store)
+    return StoreCard(store: store) {}
         .padding()
         .frame(width: 280)
         .modelContainer(container)
@@ -123,9 +132,18 @@ struct StoreCard: View {
     container.mainContext.insert(store)
 
     let products = [
-        ("Wool Runners", "https://cdn.shopify.com/s/files/1/1104/4168/products/Wool_Runner_Natural_White_Profile.png"),
-        ("Tree Dashers", "https://cdn.shopify.com/s/files/1/1104/4168/products/Tree_Dasher_Blizzard.png"),
-        ("Wool Loungers", "https://cdn.shopify.com/s/files/1/1104/4168/products/Wool_Lounger_Natural_Grey.png")
+        (
+            "Wool Runners",
+            "https://cdn.shopify.com/s/files/1/1104/4168/products/Wool_Runner_Natural_White_Profile.png"
+        ),
+        (
+            "Tree Dashers",
+            "https://cdn.shopify.com/s/files/1/1104/4168/products/Tree_Dasher_Blizzard.png"
+        ),
+        (
+            "Wool Loungers",
+            "https://cdn.shopify.com/s/files/1/1104/4168/products/Wool_Lounger_Natural_Grey.png"
+        )
     ]
 
     for (index, (title, imageURLString)) in products.enumerated() {
@@ -139,7 +157,7 @@ struct StoreCard: View {
         container.mainContext.insert(product)
     }
 
-    return StoreCard(store: store)
+    return StoreCard(store: store) {}
         .padding()
         .frame(width: 280)
         .modelContainer(container)
@@ -172,7 +190,7 @@ struct StoreCard: View {
         container.mainContext.insert(event)
     }
 
-    return StoreCard(store: store)
+    return StoreCard(store: store) {}
         .padding()
         .frame(width: 280)
         .modelContainer(container)
@@ -212,7 +230,7 @@ struct StoreCard: View {
     )
     container.mainContext.insert(newProductEvent)
 
-    return StoreCard(store: store)
+    return StoreCard(store: store) {}
         .padding()
         .frame(width: 280)
         .modelContainer(container)

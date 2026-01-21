@@ -65,6 +65,15 @@ Config is in `.xcrc` (scheme, platform, device). Currently set to `platform=mac`
 
 - Prefer SwiftUI and modern Apple frameworks over AppKit equivalents. Only use AppKit when SwiftUI lacks the capability.
 
+## Liquid Glass (macOS 26)
+
+Glass helpers are in `Views/GlassTheme.swift`. Two key rules:
+
+1. **Glass as background**: Never apply `.glassEffect()` directly to content—use `compositingGroup()` + `.background { Color.clear.glassEffect(...) }`
+2. **Controls for interactivity**: Use `Button`/`NavigationLink`, not `onTapGesture`—glass `.interactive()` only works on actual controls
+
+See [docs/liquid-glass.md](docs/liquid-glass.md) for full guidelines, best practices, and common pitfalls.
+
 ## Architecture
 
 ```

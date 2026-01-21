@@ -29,10 +29,9 @@ struct OverviewView: View {
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: 16) {
                         ForEach(stores) { store in
-                            StoreCard(store: store)
-                                .onTapGesture {
-                                    selection = .store(store.id)
-                                }
+                            StoreCard(store: store) {
+                                selection = .store(store.id)
+                            }
                         }
                     }
                     .padding(20)

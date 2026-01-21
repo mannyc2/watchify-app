@@ -9,7 +9,13 @@ import SwiftUI
 struct ProductCard: View {
     let product: Product
 
+    @State private var isHovering = false
+
+    private let cornerRadius: CGFloat = 12
+
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+
         NavigationLink(value: product) {
             VStack(alignment: .leading, spacing: 8) {
                 // Product image (square, AsyncImage)
@@ -53,16 +59,13 @@ struct ProductCard: View {
                 }
             }
             .padding(10)
-            .background(.regularMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(.white.opacity(0.2), lineWidth: 1)
-            }
-            .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
-            .contentShape(RoundedRectangle(cornerRadius: 12))
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.plain)
+        .contentShape(shape)
+        .interactiveGlassCard(isHovering: isHovering, cornerRadius: cornerRadius)
+        .onHover { isHovering = $0 }
+        .animation(.snappy(duration: 0.18), value: isHovering)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
     }
