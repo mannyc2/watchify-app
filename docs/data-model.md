@@ -5,9 +5,17 @@ SwiftData schema for Watchify.
 ## Entity Relationship
 
 ```
+SwiftData Models (persisted):
+
 Store (1) ──── (*) Product (1) ──── (*) Variant (1) ──── (*) VariantSnapshot
   │
   └── (*) ChangeEvent
+
+DTOs (in-memory, for actor boundary crossing):
+
+StoreDTO ←── Store
+ProductDTO ←── Product
+ChangeEventDTO ←── ChangeEvent
 ```
 
 ## Models
@@ -18,19 +26,25 @@ Root entity. Represents a Shopify store being monitored.
 
 ```swift
 @Model
-class Store {
+final class Store {
     @Attribute(.unique) var id: UUID
     var name: String
     var domain: String              // e.g. "shop.example.com"
     var addedAt: Date
     var lastFetchedAt: Date?
-    var fetchIntervalMinutes: Int   // default 60
-    
+    var isSyncing: Bool = false     // True during active sync
+
     @Relationship(deleteRule: .cascade, inverse: \Product.store)
-    var products: [Product]
-    
+    var products: [Product] = []
+
     @Relationship(deleteRule: .cascade, inverse: \ChangeEvent.store)
-    var changeEvents: [ChangeEvent]
+    var changeEvents: [ChangeEvent] = []
+
+    // Denormalized fields (N+1 prevention in list views)
+    var cachedProductCount: Int = 0
+    var cachedPreviewImageURLs: [String] = []
+
+    func updateListingCache(products: [Product])
 }
 ```
 
@@ -40,7 +54,14 @@ Canonical product record. Tracks `isRemoved` for products that disappear from fe
 
 ```swift
 @Model
-class Product {
+final class Product {
+    // Compound indexes for common query patterns
+    #Index<Product>(
+        [\.store], [\.store, \.isRemoved],
+        [\.store, \.cachedIsAvailable], [\.store, \.cachedPrice],
+        [\.store, \.titleSearchKey]
+    )
+
     @Attribute(.unique) var shopifyId: Int64
     var handle: String
     var title: String
@@ -54,16 +75,22 @@ class Product {
     var store: Store?
 
     @Relationship(deleteRule: .cascade, inverse: \Variant.product)
-    var variants: [Variant]
+    var variants: [Variant] = []
+
+    // Denormalized listing fields (N+1 prevention)
+    var cachedPrice: Decimal = 0
+    var cachedIsAvailable: Bool = false
+    var titleSearchKey: String = ""   // Lowercase/normalized for search
 
     // Convenience
-    var primaryImageURL: URL? {
-        imageURLs.first.flatMap { URL(string: $0) }
-    }
+    var primaryImageURL: URL?
+    var allImageURLs: [URL]
+    var currentPrice: Decimal
+    var isAvailable: Bool
+    var recentPriceChange: Decimal?   // nil if no change
 
-    var allImageURLs: [URL] {
-        imageURLs.compactMap { URL(string: $0) }
-    }
+    func updateListingCache()
+    func updateListingCache(from variantDTOs: [ShopifyVariant])
 }
 ```
 
@@ -223,22 +250,15 @@ var isAvailable: Bool {
     variants.contains { $0.available }
 }
 
-// TODO: Cache this - currently sorts on every access
-var recentPriceChange: PriceChange? {
-    guard let latest = variants.first,
-          let previous = latest.snapshots
-              .sorted(by: { $0.capturedAt > $1.capturedAt })
-              .dropFirst().first else {
-        return nil
-    }
-    let change = latest.price - previous.price
-    guard change != 0 else { return nil }
-    return PriceChange(
-        amount: change,
-        percentage: (change / previous.price) * 100
-    )
+var recentPriceChange: Decimal? {
+    guard let variant = variants.first,
+          let snapshot = variant.mostRecentSnapshot else { return nil }
+    let change = variant.price - snapshot.price
+    return change != 0 ? change : nil
 }
 ```
+
+Note: List views use `cachedPrice` and `cachedIsAvailable` instead of these computed properties to avoid N+1 relationship faults.
 
 ## Snapshot Retention
 
@@ -250,3 +270,76 @@ func cleanupOldSnapshots(context: ModelContext) {
     // Delete VariantSnapshot older than cutoff
 }
 ```
+
+---
+
+## DTOs (Data Transfer Objects)
+
+Lightweight `Sendable` structs for crossing actor boundaries. Views receive DTOs from `StoreService` instead of `@Model` objects to avoid observation overhead and actor isolation issues.
+
+### ProductDTO
+
+```swift
+struct ProductDTO: Identifiable, Sendable {
+    let id: UUID
+    let shopifyId: Int64
+    let title: String
+    let handle: String
+    let vendor: String?
+    let productType: String?
+    let imageURLs: [String]
+    let isRemoved: Bool
+
+    // Cached listing info
+    let minPrice: Decimal
+    let maxPrice: Decimal
+    let isAvailable: Bool
+    let variantCount: Int
+
+    var primaryImageURL: URL?
+}
+```
+
+### StoreDTO
+
+```swift
+struct StoreDTO: Identifiable, Sendable {
+    let id: UUID
+    let name: String
+    let domain: String
+    let lastFetchedAt: Date?
+    let isSyncing: Bool
+
+    // From cached fields
+    let cachedProductCount: Int
+    let cachedPreviewImageURLs: [String]
+}
+```
+
+### ChangeEventDTO
+
+```swift
+struct ChangeEventDTO: Identifiable, Sendable {
+    let id: UUID
+    let occurredAt: Date
+    let changeType: ChangeType
+    let productTitle: String
+    let variantTitle: String?
+    let oldValue: String?
+    let newValue: String?
+    let priceChange: Decimal?
+    let isRead: Bool
+    let magnitude: ChangeMagnitude
+
+    // Store info (denormalized)
+    let storeId: UUID?
+    let storeName: String?
+}
+```
+
+### Why DTOs?
+
+1. **Sendable**: Can safely cross actor boundaries (MainActor ↔ StoreService actor)
+2. **No observation**: Unlike `@Model` objects, DTOs don't trigger SwiftData observation when accessed
+3. **Immutable**: Structs are value types, preventing accidental mutation
+4. **Denormalized**: Include related data (e.g., `storeName`) to avoid relationship traversal

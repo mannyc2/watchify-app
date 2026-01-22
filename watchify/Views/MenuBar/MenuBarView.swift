@@ -7,24 +7,33 @@ import SwiftData
 import SwiftUI
 
 struct MenuBarView: View {
-    @Environment(\.modelContext) private var modelContext
     @Environment(\.openWindow) private var openWindow
 
-    @Query(
-        filter: #Predicate<ChangeEvent> { !$0.isRead },
-        sort: \ChangeEvent.occurredAt,
-        order: .reverse
-    )
-    private var unreadEvents: [ChangeEvent]
+    @State private var viewModel: MenuBarViewModel?
 
-    @Query(sort: \ChangeEvent.occurredAt, order: .reverse)
-    private var allEvents: [ChangeEvent]
-
-    // Show unread if any, otherwise recent
-    private var displayEvents: [ChangeEvent] {
-        let events = unreadEvents.isEmpty ? Array(allEvents.prefix(10)) : Array(unreadEvents.prefix(10))
-        return events
+    var body: some View {
+        Group {
+            if let viewModel {
+                MenuBarContentView(viewModel: viewModel, openWindow: openWindow)
+            } else {
+                ProgressView()
+                    .frame(width: 340, height: 400)
+            }
+        }
+        .task {
+            if viewModel == nil {
+                let menuBarVM = MenuBarViewModel()
+                viewModel = menuBarVM
+                await menuBarVM.loadEvents()
+            }
+        }
     }
+}
+
+/// Inner view that displays menu bar content once ViewModel is ready.
+private struct MenuBarContentView: View {
+    @Bindable var viewModel: MenuBarViewModel
+    let openWindow: OpenWindowAction
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,9 +42,9 @@ struct MenuBarView: View {
                 Text("Recent Changes")
                     .font(.headline)
                 Spacer()
-                if !unreadEvents.isEmpty {
+                if viewModel.hasUnreadEvents {
                     Button("Mark All Read") {
-                        markAllRead()
+                        viewModel.markAllRead()
                     }
                     .buttonStyle(.glass)
                     .controlSize(.small)
@@ -48,7 +57,7 @@ struct MenuBarView: View {
             Divider()
 
             // Event list
-            if displayEvents.isEmpty {
+            if viewModel.events.isEmpty {
                 ContentUnavailableView(
                     "No Changes Yet",
                     systemImage: "clock.arrow.circlepath",
@@ -58,9 +67,11 @@ struct MenuBarView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(displayEvents) { event in
-                            MenuBarEventRow(event: event)
-                            if event.id != displayEvents.last?.id {
+                        ForEach(viewModel.events) { event in
+                            MenuBarEventRowDTO(event: event) {
+                                viewModel.markEventRead(id: event.id)
+                            }
+                            if event.id != viewModel.events.last?.id {
                                 Divider()
                                     .padding(.leading, 44)
                             }
@@ -91,12 +102,6 @@ struct MenuBarView: View {
             .padding(.vertical, 10)
         }
         .frame(width: 340, height: 400)
-    }
-
-    private func markAllRead() {
-        for event in unreadEvents {
-            event.isRead = true
-        }
     }
 }
 

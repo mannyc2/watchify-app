@@ -3,12 +3,10 @@
 //  watchify
 //
 
-import SwiftData
 import SwiftUI
 
 struct StoreRow: View {
-    @Environment(\.modelContext) private var modelContext
-    let store: Store
+    let store: StoreDTO
     var onDelete: (() -> Void)?
 
     var body: some View {
@@ -30,7 +28,6 @@ struct StoreRow: View {
         .contextMenu {
             Button(role: .destructive) {
                 onDelete?()
-                modelContext.delete(store)
             } label: {
                 Label("Delete", systemImage: "trash")
             }
@@ -38,7 +35,6 @@ struct StoreRow: View {
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) {
                 onDelete?()
-                modelContext.delete(store)
             } label: {
                 Label("Delete", systemImage: "trash")
             }
@@ -47,6 +43,7 @@ struct StoreRow: View {
 }
 
 #Preview {
-    StoreRow(store: Store(name: "Allbirds", domain: "allbirds.com"))
-        .modelContainer(for: Store.self, inMemory: true)
+    List {
+        StoreRow(store: StoreDTO(name: "Allbirds", domain: "allbirds.com"))
+    }
 }

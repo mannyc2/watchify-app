@@ -1,12 +1,15 @@
 //
-//  ActivityRow.swift
+//  ActivityRowDTO.swift
 //  watchify
 //
 
 import SwiftUI
 
-struct ActivityRow: View {
-    @Bindable var event: ChangeEvent
+/// Activity row that displays a ChangeEventDTO (Sendable).
+/// Used with ActivityViewModel for background-fetched data.
+struct ActivityRowDTO: View {
+    let event: ChangeEventDTO
+    let onAppear: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -56,7 +59,7 @@ struct ActivityRow: View {
         .padding(.vertical, 4)
         .onAppear {
             if !event.isRead {
-                event.isRead = true
+                onAppear()
             }
         }
     }
@@ -91,59 +94,43 @@ struct ActivityRow: View {
 // MARK: - Previews
 
 #Preview("Price Dropped") {
-    ActivityRow(event: ChangeEvent(
-        changeType: .priceDropped,
-        productTitle: "Wool Runners",
-        variantTitle: "Size 10 / Natural White",
-        oldValue: "$110",
-        newValue: "$89",
-        priceChange: -21
-    ))
+    ActivityRowDTO(
+        event: ChangeEventDTO(
+            id: UUID(),
+            occurredAt: Date(),
+            changeType: .priceDropped,
+            productTitle: "Wool Runners",
+            variantTitle: "Size 10 / Natural White",
+            oldValue: "$110",
+            newValue: "$89",
+            priceChange: -21,
+            isRead: false,
+            magnitude: .medium,
+            storeId: nil,
+            storeName: nil
+        ),
+        onAppear: {}
+    )
     .padding()
 }
 
-#Preview("Price Increased") {
-    ActivityRow(event: ChangeEvent(
-        changeType: .priceIncreased,
-        productTitle: "Tree Dashers",
-        variantTitle: "Size 9",
-        oldValue: "$125",
-        newValue: "$135",
-        priceChange: 10
-    ))
-    .padding()
-}
-
-#Preview("Back In Stock") {
-    ActivityRow(event: ChangeEvent(
-        changeType: .backInStock,
-        productTitle: "Wool Loungers",
-        variantTitle: "Size 11 / Natural Black"
-    ))
-    .padding()
-}
-
-#Preview("Out of Stock") {
-    ActivityRow(event: ChangeEvent(
-        changeType: .outOfStock,
-        productTitle: "Tree Breezers",
-        variantTitle: "Size 8"
-    ))
-    .padding()
-}
-
-#Preview("New Product") {
-    ActivityRow(event: ChangeEvent(
-        changeType: .newProduct,
-        productTitle: "Trail Runner SWT"
-    ))
-    .padding()
-}
-
-#Preview("Product Removed") {
-    ActivityRow(event: ChangeEvent(
-        changeType: .productRemoved,
-        productTitle: "Discontinued Shoe"
-    ))
+#Preview("Read Event") {
+    ActivityRowDTO(
+        event: ChangeEventDTO(
+            id: UUID(),
+            occurredAt: Date(),
+            changeType: .backInStock,
+            productTitle: "Tree Dashers",
+            variantTitle: "Size 9",
+            oldValue: nil,
+            newValue: nil,
+            priceChange: nil,
+            isRead: true,
+            magnitude: .medium,
+            storeId: nil,
+            storeName: nil
+        ),
+        onAppear: {}
+    )
     .padding()
 }

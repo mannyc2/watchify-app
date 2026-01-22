@@ -6,6 +6,7 @@
 import Foundation
 import SwiftData
 import Testing
+import UserNotifications
 @testable import watchify
 
 // MARK: - Test Tags
@@ -19,48 +20,7 @@ extension Tag {
 @Suite("Sync Notification Integration")
 struct SyncNotificationTests {
 
-    // MARK: - Shared Test Context
-
-    @MainActor
-    final class TestContext {
-        let container: ModelContainer
-        let context: ModelContext
-        let mockAPI: MockShopifyAPI
-        let service: StoreService
-
-        init() throws {
-            let schema = Schema([Store.self, Product.self, Variant.self, VariantSnapshot.self, ChangeEvent.self])
-            let config = ModelConfiguration(isStoredInMemoryOnly: true)
-            self.container = try ModelContainer(for: schema, configurations: config)
-            self.context = container.mainContext  // Use mainContext to see actor's saved changes
-            self.mockAPI = MockShopifyAPI()
-            self.service = StoreService(api: mockAPI)
-        }
-
-        func addStore(
-            name: String = "Test Store",
-            domain: String = "test.myshopify.com",
-            products: [ShopifyProduct]
-        ) async throws -> Store {
-            await mockAPI.setProducts(products)
-            return try await service.addStore(name: name, domain: domain, context: context)
-        }
-
-        /// Prepares a store for sync testing by clearing rate limit.
-        func clearRateLimit(for store: Store) {
-            store.lastFetchedAt = Date.distantPast
-        }
-    }
-
     // MARK: - Assertion Helpers
-
-    @MainActor
-    private func fetchEvents(from context: ModelContext) throws -> [ChangeEvent] {
-        let descriptor = FetchDescriptor<ChangeEvent>(
-            sortBy: [SortDescriptor(\.occurredAt, order: .reverse)]
-        )
-        return try context.fetch(descriptor)
-    }
 
     @MainActor
     private func fetchSnapshots(from context: ModelContext) throws -> [VariantSnapshot] {
@@ -73,7 +33,7 @@ struct SyncNotificationTests {
     @Test("syncStore returns detected changes for notification", .tags(.syncNotifications))
     @MainActor
     func syncStoreReturnsChanges() async throws {
-        let ctx = try TestContext()
+        let ctx = try await StoreServiceTestContext()
 
         // Initial product at $100
         let store = try await ctx.addStore(products: [
@@ -86,7 +46,7 @@ struct SyncNotificationTests {
         ])
 
         ctx.clearRateLimit(for: store)
-        let returnedChanges = try await ctx.service.syncStore(store, context: ctx.context)
+        let returnedChanges = try await ctx.service.syncStore(storeId: store.id)
 
         #expect(returnedChanges.count == 1)
         #expect(returnedChanges.first?.changeType == .priceDropped)
@@ -97,14 +57,14 @@ struct SyncNotificationTests {
     @Test("syncStore returns empty array when nothing changed", .tags(.syncNotifications))
     @MainActor
     func syncStoreReturnsEmptyWhenNoChanges() async throws {
-        let ctx = try TestContext()
+        let ctx = try await StoreServiceTestContext()
 
         let product = ShopifyProduct.mock(id: 1, title: "Test Product")
         let store = try await ctx.addStore(products: [product])
 
         // Sync with identical data
         ctx.clearRateLimit(for: store)
-        let returnedChanges = try await ctx.service.syncStore(store, context: ctx.context)
+        let returnedChanges = try await ctx.service.syncStore(storeId: store.id)
 
         #expect(returnedChanges.isEmpty)
     }
@@ -114,7 +74,7 @@ struct SyncNotificationTests {
     @Test("returned changes have same count as persisted events", .tags(.syncNotifications))
     @MainActor
     func returnedChangesMatchPersistedEvents() async throws {
-        let ctx = try TestContext()
+        let ctx = try await StoreServiceTestContext()
 
         // Setup: two products
         let store = try await ctx.addStore(products: [
@@ -129,7 +89,7 @@ struct SyncNotificationTests {
         ])
 
         ctx.clearRateLimit(for: store)
-        let returnedChanges = try await ctx.service.syncStore(store, context: ctx.context)
+        let returnedChanges = try await ctx.service.syncStore(storeId: store.id)
         let persistedEvents = try fetchEvents(from: ctx.context)
 
         #expect(returnedChanges.count == persistedEvents.count)
@@ -141,7 +101,7 @@ struct SyncNotificationTests {
     @Test("batch sync handles many products without data loss", .tags(.syncNotifications))
     @MainActor
     func batchSyncHandlesManyProducts() async throws {
-        let ctx = try TestContext()
+        let ctx = try await StoreServiceTestContext()
 
         // Setup: 50 products at $100 each
         let initialProducts = (1...50).map { idx in
@@ -166,7 +126,7 @@ struct SyncNotificationTests {
         await ctx.mockAPI.setProducts(updatedProducts)
 
         ctx.clearRateLimit(for: store)
-        let returnedChanges = try await ctx.service.syncStore(store, context: ctx.context)
+        let returnedChanges = try await ctx.service.syncStore(storeId: store.id)
         let persistedEvents = try fetchEvents(from: ctx.context)
         let snapshots = try fetchSnapshots(from: ctx.context)
 
@@ -180,7 +140,7 @@ struct SyncNotificationTests {
     @Test("returned changes reference correct store", .tags(.syncNotifications))
     @MainActor
     func changesReferenceCorrectStore() async throws {
-        let ctx = try TestContext()
+        let ctx = try await StoreServiceTestContext()
 
         // Create two stores
         let store1 = try await ctx.addStore(
@@ -189,13 +149,10 @@ struct SyncNotificationTests {
             products: [.mock(id: 1, title: "Product A", variants: [.mock(id: 100, price: 100.00)])]
         )
 
-        await ctx.mockAPI.setProducts([
-            .mock(id: 2, title: "Product B", variants: [.mock(id: 200, price: 50.00)])
-        ])
-        let store2 = try await ctx.service.addStore(
+        let store2 = try await ctx.addStore(
             name: "Store 2",
             domain: "store2.myshopify.com",
-            context: ctx.context
+            products: [.mock(id: 2, title: "Product B", variants: [.mock(id: 200, price: 50.00)])]
         )
 
         // Sync store1 with price change
@@ -203,11 +160,11 @@ struct SyncNotificationTests {
             .mock(id: 1, title: "Product A", variants: [.mock(id: 100, price: 80.00)])
         ])
         ctx.clearRateLimit(for: store1)
-        let returnedChanges = try await ctx.service.syncStore(store1, context: ctx.context)
+        let returnedChanges = try await ctx.service.syncStore(storeId: store1.id)
 
         #expect(returnedChanges.count == 1)
-        #expect(returnedChanges.first?.store?.id == store1.id)
-        #expect(returnedChanges.first?.store?.id != store2.id)
+        #expect(returnedChanges.first?.storeId == store1.id)
+        #expect(returnedChanges.first?.storeId != store2.id)
     }
 
     // MARK: - Test 6: NotificationService Integration
@@ -215,7 +172,7 @@ struct SyncNotificationTests {
     @Test("NotificationService.send handles returned changes", .tags(.syncNotifications))
     @MainActor
     func notificationServiceHandlesChanges() async throws {
-        let ctx = try TestContext()
+        let ctx = try await StoreServiceTestContext()
 
         // Create store with price change
         let store = try await ctx.addStore(products: [
@@ -227,14 +184,21 @@ struct SyncNotificationTests {
         ])
 
         ctx.clearRateLimit(for: store)
-        let changes = try await ctx.service.syncStore(store, context: ctx.context)
+        let changes = try await ctx.service.syncStore(storeId: store.id)
 
-        // NotificationService.send should not crash even without authorization
-        // (it will early-return due to authorization check in test environment)
-        await NotificationService.shared.send(for: changes)
+        try await withNotificationDefaults {
+            let fakeCenter = FakeNotificationCenter()
+            fakeCenter.currentAuthorizationStatus = .authorized
+            let service = NotificationService(center: fakeCenter)
 
-        // If we get here without crash, the integration works
-        #expect(changes.count == 1)
+            await service.send(for: changes)
+
+            #expect(changes.count == 1)
+            #expect(fakeCenter.addedRequests.count == 1)
+            let request = try #require(fakeCenter.addedRequests.first)
+            #expect(request.content.title == store.name)
+            #expect(request.content.threadIdentifier == store.id.uuidString)
+        }
     }
 
     // MARK: - Test 7: sendIfAuthorized Integration
@@ -242,7 +206,7 @@ struct SyncNotificationTests {
     @Test("sendIfAuthorized handles changes without crashing", .tags(.syncNotifications))
     @MainActor
     func sendIfAuthorizedHandlesChanges() async throws {
-        let ctx = try TestContext()
+        let ctx = try await StoreServiceTestContext()
 
         let store = try await ctx.addStore(products: [
             .mock(id: 1, title: "Test Product", variants: [.mock(id: 100, price: 100.00)])
@@ -253,13 +217,20 @@ struct SyncNotificationTests {
         ])
 
         ctx.clearRateLimit(for: store)
-        let changes = try await ctx.service.syncStore(store, context: ctx.context)
+        let changes = try await ctx.service.syncStore(storeId: store.id)
 
-        // sendIfAuthorized checks authorization status first, then sends if allowed
-        // In test environment, it will either prompt (first run) or skip silently
-        await NotificationService.shared.sendIfAuthorized(for: changes)
+        await withNotificationDefaults {
+            let fakeCenter = FakeNotificationCenter()
+            fakeCenter.currentAuthorizationStatus = .notDetermined
+            fakeCenter.requestAuthorizationResult = true
+            let service = NotificationService(center: fakeCenter)
 
-        #expect(changes.count == 1)
+            await service.sendIfAuthorized(for: changes)
+
+            #expect(changes.count == 1)
+            #expect(fakeCenter.requestAuthorizationCalls == 1)
+            #expect(fakeCenter.addedRequests.count == 1)
+        }
     }
 
     // MARK: - Test 8: authorizationStatus Returns Valid Status
@@ -267,11 +238,11 @@ struct SyncNotificationTests {
     @Test("authorizationStatus returns without crashing", .tags(.syncNotifications))
     @MainActor
     func authorizationStatusReturnsValidStatus() async throws {
-        // authorizationStatus should return without crashing
-        _ = await NotificationService.shared.authorizationStatus()
+        let fakeCenter = FakeNotificationCenter()
+        fakeCenter.currentAuthorizationStatus = .denied
+        let service = NotificationService(center: fakeCenter)
 
-        // If we reach here, the method works correctly
-        #expect(true)
+        #expect(await service.authorizationStatus() == .denied)
     }
 
     // MARK: - Test 9: sendIfAuthorized Skips Empty Changes
@@ -279,11 +250,13 @@ struct SyncNotificationTests {
     @Test("sendIfAuthorized returns early for empty changes", .tags(.syncNotifications))
     @MainActor
     func sendIfAuthorizedSkipsEmptyChanges() async throws {
-        // Should not crash or prompt when called with empty array
-        await NotificationService.shared.sendIfAuthorized(for: [])
+        let fakeCenter = FakeNotificationCenter()
+        let service = NotificationService(center: fakeCenter)
 
-        // If we get here, it handled empty input correctly
-        #expect(true)
+        await service.sendIfAuthorized(for: [])
+
+        #expect(fakeCenter.requestAuthorizationCalls == 0)
+        #expect(fakeCenter.addedRequests.isEmpty)
     }
 
     // MARK: - Test 10: Sync Flow Triggers sendIfAuthorized
@@ -291,7 +264,7 @@ struct SyncNotificationTests {
     @Test("sync with changes triggers notification flow", .tags(.syncNotifications))
     @MainActor
     func syncWithChangesTriggersSendIfAuthorized() async throws {
-        let ctx = try TestContext()
+        let ctx = try await StoreServiceTestContext()
 
         // Initial state
         let store = try await ctx.addStore(products: [
@@ -303,9 +276,9 @@ struct SyncNotificationTests {
             .mock(id: 1, title: "Product", variants: [.mock(id: 100, price: 75.00)])
         ])
 
-        // syncStore now calls sendIfAuthorized internally
+        // syncStore returns detected changes for notification flow
         ctx.clearRateLimit(for: store)
-        let changes = try await ctx.service.syncStore(store, context: ctx.context)
+        let changes = try await ctx.service.syncStore(storeId: store.id)
 
         // Verify changes were detected (notification would have been attempted)
         #expect(changes.count == 1)

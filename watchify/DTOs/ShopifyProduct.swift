@@ -7,6 +7,11 @@ import Foundation
 
 struct ShopifyProductsResponse: Sendable, Codable {
     let products: [ShopifyProduct]
+
+    nonisolated init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        products = try container.decode([ShopifyProduct].self, forKey: .products)
+    }
 }
 
 struct ShopifyProduct: Sendable, Codable {
@@ -23,6 +28,18 @@ struct ShopifyProduct: Sendable, Codable {
         case id, title, handle, vendor, images, variants
         case productType = "product_type"
         case createdAt = "created_at"
+    }
+
+    nonisolated init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(Int64.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        handle = try container.decode(String.self, forKey: .handle)
+        vendor = try container.decodeIfPresent(String.self, forKey: .vendor)
+        productType = try container.decodeIfPresent(String.self, forKey: .productType)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
+        images = try container.decode([ShopifyImage].self, forKey: .images)
+        variants = try container.decode([ShopifyVariant].self, forKey: .variants)
     }
 
     init(
@@ -48,6 +65,15 @@ struct ShopifyProduct: Sendable, Codable {
 
 struct ShopifyImage: Sendable, Codable {
     let src: String
+
+    nonisolated init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        src = try container.decode(String.self, forKey: .src)
+    }
+
+    init(src: String) {
+        self.src = src
+    }
 }
 
 struct ShopifyVariant: Sendable, Codable {
@@ -64,7 +90,7 @@ struct ShopifyVariant: Sendable, Codable {
         case compareAtPrice = "compare_at_price"
     }
 
-    init(from decoder: Decoder) throws {
+    nonisolated init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(Int64.self, forKey: .id)
         title = try container.decode(String.self, forKey: .title)

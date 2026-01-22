@@ -3,12 +3,11 @@
 //  watchify
 //
 
-import SwiftData
 import SwiftUI
 
 struct OverviewView: View {
+    var viewModel: StoreListViewModel
     @Binding var selection: SidebarSelection?
-    @Query(sort: \Store.addedAt, order: .reverse) private var stores: [Store]
     var onAddStore: () -> Void
 
     private let columns = [
@@ -17,7 +16,7 @@ struct OverviewView: View {
 
     var body: some View {
         Group {
-            if stores.isEmpty {
+            if viewModel.stores.isEmpty {
                 ContentUnavailableView {
                     Label("No Stores", systemImage: "storefront")
                 } description: {
@@ -28,7 +27,7 @@ struct OverviewView: View {
             } else {
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: 16) {
-                        ForEach(stores) { store in
+                        ForEach(viewModel.stores) { store in
                             StoreCard(store: store) {
                                 selection = .store(store.id)
                             }
@@ -43,17 +42,39 @@ struct OverviewView: View {
 }
 
 #Preview("No Stores") {
+    @Previewable @State var viewModel = StoreListViewModel(previewStores: [])
+
     NavigationStack {
-        OverviewView(selection: .constant(.overview), onAddStore: {})
+        OverviewView(viewModel: viewModel, selection: .constant(.overview), onAddStore: {})
     }
-    .modelContainer(for: Store.self, inMemory: true)
 }
 
 #Preview("With Stores") {
     @Previewable @State var selection: SidebarSelection? = .overview
+    @Previewable @State var viewModel = StoreListViewModel(previewStores: [
+        StoreDTO(
+            name: "Allbirds",
+            domain: "allbirds.com",
+            cachedProductCount: 42,
+            cachedPreviewImageURLs: [
+                "https://cdn.shopify.com/s/files/1/1104/4168/products/Wool_Runner.png",
+                "https://cdn.shopify.com/s/files/1/1104/4168/products/Tree_Dasher.png",
+                "https://cdn.shopify.com/s/files/1/1104/4168/products/Wool_Lounger.png"
+            ]
+        ),
+        StoreDTO(name: "Gymshark", domain: "gymshark.com", cachedProductCount: 128, cachedPreviewImageURLs: []),
+        StoreDTO(
+            name: "MVMT Watches",
+            domain: "mvmt.com",
+            cachedProductCount: 15,
+            cachedPreviewImageURLs: [
+                "https://cdn.shopify.com/s/files/1/1104/4168/products/Wool_Runner.png",
+                "https://cdn.shopify.com/s/files/1/1104/4168/products/Tree_Dasher.png"
+            ]
+        )
+    ])
 
     NavigationStack {
-        OverviewView(selection: $selection, onAddStore: {})
+        OverviewView(viewModel: viewModel, selection: $selection, onAddStore: {})
     }
-    .modelContainer(for: Store.self, inMemory: true)
 }

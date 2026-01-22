@@ -31,7 +31,7 @@ struct StoreServiceTests {
     @Test("Adding a new store creates no change events", .tags(.changeDetection, .productLifecycle))
     @MainActor
     func addStoreCreatesNoEvents() async throws {
-        let ctx = try StoreServiceTestContext()
+        let ctx = try await StoreServiceTestContext()
 
         let store = try await ctx.addStore(products: [.mock(id: 1, title: "Test Product")])
 
@@ -42,14 +42,14 @@ struct StoreServiceTests {
     @Test("Syncing with no changes creates no events", .tags(.changeDetection))
     @MainActor
     func syncWithNoChangesCreatesNoEvents() async throws {
-        let ctx = try StoreServiceTestContext()
+        let ctx = try await StoreServiceTestContext()
 
         let product = ShopifyProduct.mock(id: 1, title: "Test Product")
         let store = try await ctx.addStore(products: [product])
 
         // Clear rate limit and sync - nothing changed
         ctx.clearRateLimit(for: store)
-        try await ctx.service.syncStore(store, context: ctx.context)
+        _ = try await ctx.service.syncStore(storeId: store.id)
 
         try expectEventCount(0, in: ctx.context)
     }
@@ -60,7 +60,7 @@ struct StoreServiceTests {
     @Test("Syncing detects price drop", .tags(.changeDetection, .priceChanges))
     @MainActor
     func syncDetectsPriceDrop() async throws {
-        let ctx = try StoreServiceTestContext()
+        let ctx = try await StoreServiceTestContext()
 
         // Initial product at $100
         let store = try await ctx.addStore(products: [
@@ -72,7 +72,7 @@ struct StoreServiceTests {
             .mock(id: 1, title: "Test Product", variants: [.mock(id: 100, price: 80.00)])
         ])
         ctx.clearRateLimit(for: store)
-        try await ctx.service.syncStore(store, context: ctx.context)
+        _ = try await ctx.service.syncStore(storeId: store.id)
 
         let events = try fetchEvents(from: ctx.context)
         #expect(events.count == 1)
@@ -86,7 +86,7 @@ struct StoreServiceTests {
     @Test("Syncing detects price increase", .tags(.changeDetection, .priceChanges))
     @MainActor
     func syncDetectsPriceIncrease() async throws {
-        let ctx = try StoreServiceTestContext()
+        let ctx = try await StoreServiceTestContext()
 
         let store = try await ctx.addStore(products: [
             .mock(id: 1, title: "Test Product", variants: [.mock(id: 100, price: 100.00)])
@@ -97,7 +97,7 @@ struct StoreServiceTests {
             .mock(id: 1, title: "Test Product", variants: [.mock(id: 100, price: 130.00)])
         ])
         ctx.clearRateLimit(for: store)
-        try await ctx.service.syncStore(store, context: ctx.context)
+        _ = try await ctx.service.syncStore(storeId: store.id)
 
         let events = try fetchEvents(from: ctx.context)
         #expect(events.count == 1)
@@ -110,7 +110,7 @@ struct StoreServiceTests {
     @Test("Syncing detects back in stock", .tags(.changeDetection, .stockChanges))
     @MainActor
     func syncDetectsBackInStock() async throws {
-        let ctx = try StoreServiceTestContext()
+        let ctx = try await StoreServiceTestContext()
 
         // Initially out of stock
         let store = try await ctx.addStore(products: [
@@ -122,7 +122,7 @@ struct StoreServiceTests {
             .mock(id: 1, title: "Test Product", variants: [.mock(id: 100, available: true)])
         ])
         ctx.clearRateLimit(for: store)
-        try await ctx.service.syncStore(store, context: ctx.context)
+        _ = try await ctx.service.syncStore(storeId: store.id)
 
         try expectEvent(type: .backInStock, in: ctx.context)
         let events = try fetchEvents(from: ctx.context)
@@ -132,7 +132,7 @@ struct StoreServiceTests {
     @Test("Syncing detects out of stock", .tags(.changeDetection, .stockChanges))
     @MainActor
     func syncDetectsOutOfStock() async throws {
-        let ctx = try StoreServiceTestContext()
+        let ctx = try await StoreServiceTestContext()
 
         let store = try await ctx.addStore(products: [
             .mock(id: 1, title: "Test Product", variants: [.mock(id: 100, available: true)])
@@ -143,7 +143,7 @@ struct StoreServiceTests {
             .mock(id: 1, title: "Test Product", variants: [.mock(id: 100, available: false)])
         ])
         ctx.clearRateLimit(for: store)
-        try await ctx.service.syncStore(store, context: ctx.context)
+        _ = try await ctx.service.syncStore(storeId: store.id)
 
         try expectEvent(type: .outOfStock, in: ctx.context)
     }
@@ -153,7 +153,7 @@ struct StoreServiceTests {
     @Test("Syncing detects new products", .tags(.changeDetection, .productLifecycle))
     @MainActor
     func syncDetectsNewProducts() async throws {
-        let ctx = try StoreServiceTestContext()
+        let ctx = try await StoreServiceTestContext()
 
         let product1 = ShopifyProduct.mock(id: 1, title: "Product 1")
         let store = try await ctx.addStore(products: [product1])
@@ -164,7 +164,7 @@ struct StoreServiceTests {
             .mock(id: 2, title: "Product 2", handle: "product-2")
         ])
         ctx.clearRateLimit(for: store)
-        try await ctx.service.syncStore(store, context: ctx.context)
+        _ = try await ctx.service.syncStore(storeId: store.id)
 
         let events = try fetchEvents(from: ctx.context)
         #expect(events.count == 1)
@@ -175,7 +175,7 @@ struct StoreServiceTests {
     @Test("Syncing detects removed products", .tags(.changeDetection, .productLifecycle))
     @MainActor
     func syncDetectsRemovedProducts() async throws {
-        let ctx = try StoreServiceTestContext()
+        let ctx = try await StoreServiceTestContext()
 
         let product1 = ShopifyProduct.mock(id: 1, title: "Product 1")
         let product2 = ShopifyProduct.mock(id: 2, title: "Product 2", handle: "product-2")
@@ -184,7 +184,7 @@ struct StoreServiceTests {
         // Remove product 2
         await ctx.mockAPI.setProducts([product1])
         ctx.clearRateLimit(for: store)
-        try await ctx.service.syncStore(store, context: ctx.context)
+        _ = try await ctx.service.syncStore(storeId: store.id)
 
         try expectEvent(type: .productRemoved, in: ctx.context)
         let events = try fetchEvents(from: ctx.context)
@@ -201,7 +201,7 @@ struct StoreServiceTests {
     @Test("Syncing detects multiple changes", .tags(.changeDetection))
     @MainActor
     func syncDetectsMultipleChanges() async throws {
-        let ctx = try StoreServiceTestContext()
+        let ctx = try await StoreServiceTestContext()
 
         // Two products, one with two variants
         let store = try await ctx.addStore(products: [
@@ -220,7 +220,7 @@ struct StoreServiceTests {
             ])
         ])
         ctx.clearRateLimit(for: store)
-        try await ctx.service.syncStore(store, context: ctx.context)
+        _ = try await ctx.service.syncStore(storeId: store.id)
 
         try expectEventCount(3, in: ctx.context)
         try expectEvent(type: .priceDropped, in: ctx.context)
@@ -233,7 +233,7 @@ struct StoreServiceTests {
     @Test("Syncing handles API errors gracefully", .tags(.errorHandling))
     @MainActor
     func syncHandlesAPIErrors() async throws {
-        let ctx = try StoreServiceTestContext()
+        let ctx = try await StoreServiceTestContext()
 
         let store = try await ctx.addStore(products: [.mock(id: 1)])
 
@@ -242,7 +242,7 @@ struct StoreServiceTests {
         await ctx.mockAPI.setShouldThrow(true)
 
         await #expect(throws: URLError.self) {
-            try await ctx.service.syncStore(store, context: ctx.context)
+            _ = try await ctx.service.syncStore(storeId: store.id)
         }
 
         // Verify no partial changes were saved
@@ -252,15 +252,14 @@ struct StoreServiceTests {
     @Test("Adding store handles API errors", .tags(.errorHandling))
     @MainActor
     func addStoreHandlesAPIErrors() async throws {
-        let ctx = try StoreServiceTestContext()
+        let ctx = try await StoreServiceTestContext()
 
         await ctx.mockAPI.setShouldThrow(true, error: ShopifyAPIError.httpError(statusCode: 404))
 
         await #expect(throws: ShopifyAPIError.self) {
-            try await ctx.service.addStore(
+            _ = try await ctx.service.addStore(
                 name: "Invalid Store",
-                domain: "non-existent.myshopify.com",
-                context: ctx.context
+                domain: "non-existent.myshopify.com"
             )
         }
     }
@@ -270,44 +269,44 @@ struct StoreServiceTests {
     @Test("Rate limiting prevents sync within 60 seconds", .tags(.rateLimiting, .errorHandling))
     @MainActor
     func rateLimitingPreventsSyncWithin60Seconds() async throws {
-        let ctx = try StoreServiceTestContext()
+        let ctx = try await StoreServiceTestContext()
 
         // addStore sets lastFetchedAt to now
         let store = try await ctx.addStore(products: [.mock(id: 1)])
 
         // Immediate sync should be rate limited
         await #expect(throws: SyncError.self) {
-            try await ctx.service.syncStore(store, context: ctx.context)
+            _ = try await ctx.service.syncStore(storeId: store.id)
         }
     }
 
     @Test("Rate limiting allows sync after 60 seconds", .tags(.rateLimiting))
     @MainActor
     func rateLimitingAllowsSyncAfter60Seconds() async throws {
-        let ctx = try StoreServiceTestContext()
+        let ctx = try await StoreServiceTestContext()
 
         let store = try await ctx.addStore(products: [.mock(id: 1)])
 
         // Manually set lastFetchedAt to 61 seconds ago
-        store.lastFetchedAt = Date().addingTimeInterval(-61)
+        ctx.setLastFetchedAt(Date().addingTimeInterval(-61), for: store)
 
         // Sync should succeed
-        let changes = try await ctx.service.syncStore(store, context: ctx.context)
+        let changes = try await ctx.service.syncStore(storeId: store.id)
         #expect(changes.isEmpty)  // No changes since products unchanged
     }
 
     @Test("Rate limit error includes retry time", .tags(.rateLimiting, .errorHandling))
     @MainActor
     func rateLimitErrorIncludesRetryTime() async throws {
-        let ctx = try StoreServiceTestContext()
+        let ctx = try await StoreServiceTestContext()
 
         let store = try await ctx.addStore(products: [.mock(id: 1)])
 
         // Set lastFetchedAt to 30 seconds ago (should need to wait ~30 more seconds)
-        store.lastFetchedAt = Date().addingTimeInterval(-30)
+        ctx.setLastFetchedAt(Date().addingTimeInterval(-30), for: store)
 
         do {
-            try await ctx.service.syncStore(store, context: ctx.context)
+            _ = try await ctx.service.syncStore(storeId: store.id)
             Issue.record("Expected SyncError.rateLimited to be thrown")
         } catch let error as SyncError {
             if case .rateLimited(let retryAfter) = error {
@@ -343,7 +342,7 @@ struct StoreServiceTests {
     @Test("First sync after addStore is rate limited", .tags(.rateLimiting))
     @MainActor
     func firstSyncAfterAddStoreIsRateLimited() async throws {
-        let ctx = try StoreServiceTestContext()
+        let ctx = try await StoreServiceTestContext()
 
         // This is the expected behavior: addStore sets lastFetchedAt,
         // so subsequent manual sync should wait
@@ -351,7 +350,7 @@ struct StoreServiceTests {
         #expect(store.lastFetchedAt != nil)
 
         do {
-            try await ctx.service.syncStore(store, context: ctx.context)
+            _ = try await ctx.service.syncStore(storeId: store.id)
             Issue.record("Expected rate limit error")
         } catch let error as SyncError {
             if case .rateLimited(let retryAfter) = error {
@@ -368,7 +367,7 @@ struct StoreServiceTests {
     @Test("Tests are properly isolated", .tags(.changeDetection), arguments: 1...3)
     @MainActor
     func testsAreIsolated(iteration: Int) async throws {
-        let ctx = try StoreServiceTestContext()
+        let ctx = try await StoreServiceTestContext()
 
         _ = try await ctx.addStore(
             name: "Store \(iteration)",

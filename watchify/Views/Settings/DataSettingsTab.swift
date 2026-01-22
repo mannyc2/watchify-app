@@ -3,11 +3,9 @@
 //  watchify
 //
 
-import SwiftData
 import SwiftUI
 
 struct DataSettingsTab: View {
-    @Environment(\.modelContext) private var modelContext
     @AppStorage("autoDeleteEvents") private var autoDelete = false
     @AppStorage("eventRetentionDays") private var retentionDays = 90
     @State private var showingClearConfirmation = false
@@ -43,11 +41,12 @@ struct DataSettingsTab: View {
     }
 
     private func clearAllEvents() {
-        try? modelContext.delete(model: ChangeEvent.self)
+        Task {
+            await StoreService.shared.deleteAllEvents()
+        }
     }
 }
 
 #Preview {
     DataSettingsTab()
-        .modelContainer(for: ChangeEvent.self, inMemory: true)
 }

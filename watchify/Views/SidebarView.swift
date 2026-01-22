@@ -3,20 +3,16 @@
 //  watchify
 //
 
-import SwiftData
 import SwiftUI
 
 enum SidebarSelection: Hashable {
     case overview
     case activity
-    case store(Store.ID)
+    case store(UUID)
 }
 
 struct SidebarView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Store.addedAt, order: .reverse) private var stores: [Store]
-    @Query(filter: #Predicate<ChangeEvent> { !$0.isRead })
-    private var unreadEvents: [ChangeEvent]
+    var viewModel: StoreListViewModel
     @Binding var selection: SidebarSelection?
     var onAddStore: () -> Void
 
@@ -26,19 +22,19 @@ struct SidebarView: View {
                 .tag(SidebarSelection.overview)
 
             Label("Activity", systemImage: "clock.arrow.circlepath")
-                .badge(unreadEvents.count)
+                .badge(viewModel.unreadCount)
                 .tag(SidebarSelection.activity)
 
             Section("Stores") {
-                ForEach(stores) { store in
+                ForEach(viewModel.stores) { store in
                     StoreRow(store: store) {
                         if case .store(store.id) = selection {
                             selection = nil
                         }
+                        Task { await viewModel.deleteStore(id: store.id) }
                     }
                     .tag(SidebarSelection.store(store.id))
                 }
-                .onDelete(perform: deleteStores)
 
                 Button { onAddStore() } label: {
                     Label("Add Store", systemImage: "plus")
@@ -48,69 +44,34 @@ struct SidebarView: View {
         }
         .navigationTitle("Watchify")
     }
-
-    private func deleteStores(at offsets: IndexSet) {
-        for index in offsets {
-            let store = stores[index]
-            if case .store(store.id) = selection {
-                selection = nil
-            }
-            modelContext.delete(store)
-        }
-    }
 }
 
 // MARK: - Previews
 
 #Preview("Empty Stores") {
     @Previewable @State var selection: SidebarSelection? = .overview
-    SidebarView(selection: $selection, onAddStore: {})
-        .modelContainer(for: Store.self, inMemory: true)
+    @Previewable @State var viewModel = StoreListViewModel(previewStores: [])
+
+    SidebarView(viewModel: viewModel, selection: $selection, onAddStore: {})
 }
 
 #Preview("With Stores") {
     @Previewable @State var selection: SidebarSelection? = .overview
-    SidebarPreviewWithStores(selection: $selection)
+    @Previewable @State var viewModel = StoreListViewModel(previewStores: [
+        StoreDTO(name: "Allbirds", domain: "allbirds.com"),
+        StoreDTO(name: "Gymshark", domain: "gymshark.com"),
+        StoreDTO(name: "MVMT Watches", domain: "mvmt.com")
+    ])
+
+    SidebarView(viewModel: viewModel, selection: $selection, onAddStore: {})
 }
 
-#Preview("With Store Selected") {
+#Preview("With Unread Badge") {
     @Previewable @State var selection: SidebarSelection? = .overview
-    SidebarPreviewWithSelectedStore(selection: $selection)
-}
+    @Previewable @State var viewModel = StoreListViewModel(
+        previewStores: [StoreDTO(name: "Allbirds", domain: "allbirds.com")],
+        previewUnreadCount: 5
+    )
 
-/// Helper view to set up stores before rendering the sidebar
-private struct SidebarPreviewWithStores: View {
-    @Binding var selection: SidebarSelection?
-
-    var body: some View {
-        let container = makePreviewContainer()
-
-        let storeData = [
-            ("Allbirds", "allbirds.com"),
-            ("Gymshark", "gymshark.com"),
-            ("MVMT Watches", "mvmt.com")
-        ]
-
-        for (name, domain) in storeData {
-            let store = Store(name: name, domain: domain)
-            container.mainContext.insert(store)
-        }
-
-        return SidebarView(selection: $selection, onAddStore: {})
-            .modelContainer(container)
-    }
-}
-
-/// Helper view to set up a selected store before rendering the sidebar
-private struct SidebarPreviewWithSelectedStore: View {
-    @Binding var selection: SidebarSelection?
-
-    var body: some View {
-        let container = makePreviewContainer()
-        let store = Store(name: "Allbirds", domain: "allbirds.com")
-        container.mainContext.insert(store)
-
-        return SidebarView(selection: .constant(.store(store.id)), onAddStore: {})
-            .modelContainer(container)
-    }
+    SidebarView(viewModel: viewModel, selection: $selection, onAddStore: {})
 }

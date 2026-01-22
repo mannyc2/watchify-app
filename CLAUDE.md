@@ -80,14 +80,22 @@ See [docs/liquid-glass.md](docs/liquid-glass.md) for full guidelines, best pract
 ┌─────────────────────────────────────────────┐
 │  Views (SwiftUI + Liquid Glass)             │
 ├─────────────────────────────────────────────┤
-│  SyncScheduler (@MainActor, @Observable)    │
+│  ViewModels (@MainActor, @Observable)       │
+│  - StoreDetailViewModel                     │
+│  - ActivityViewModel                        │
+│  - MenuBarViewModel                         │
+├─────────────────────────────────────────────┤
+│  DTOs (Sendable, cross-actor boundary)      │
+│  - ProductDTO, StoreDTO, ChangeEventDTO     │
 ├──────────────────┬──────────────────────────┤
 │  StoreService    │  NotificationService     │
-│  (actor)         │  (@MainActor)            │
+│  (ModelActor)    │  (@MainActor)            │
 ├──────────────────┴──────────────────────────┤
 │  SwiftData Models                           │
 └─────────────────────────────────────────────┘
 ```
+
+Background sync runs via `Task.detached` in `watchifyApp.swift` to avoid blocking MainActor.
 
 ## Core Loop
 
@@ -102,10 +110,12 @@ See [docs/liquid-glass.md](docs/liquid-glass.md) for full guidelines, best pract
 
 | File | Purpose |
 |------|---------|
-| `Services/StoreService.swift` | Fetch + diff logic |
-| `Services/SyncScheduler.swift` | Coordinates syncs |
+| `Services/StoreService.swift` | ModelActor for all SwiftData operations |
+| `Services/StoreService+Sync.swift` | Product sync and change detection |
+| `Services/StoreService+Events.swift` | Event queries and management |
+| `ViewModels/` | @MainActor ViewModels for complex views |
+| `DTOs/` | Sendable types for cross-actor data transfer |
 | `Models/` | SwiftData schema |
-| `DTOs/ShopifyProduct.swift` | JSON decoding |
 
 ## Docs
 
@@ -115,14 +125,27 @@ See [docs/liquid-glass.md](docs/liquid-glass.md) for full guidelines, best pract
 | [docs/services.md](docs/services.md) | Service layer |
 | [docs/views.md](docs/views.md) | UI components |
 | [docs/shopify-api.md](docs/shopify-api.md) | Shopify JSON + pagination |
+| [docs/instruments-cli.md](docs/instruments-cli.md) | Profiling with xctrace |
 | [docs/roadmap.md](docs/roadmap.md) | MVP phases |
 
-## Known Issues to Fix During Implementation
+## Performance Notes
 
-1. **Price decoding**: Shopify returns price as string `"29.99"`. Need custom decoder.
+- **Background sync**: Uses `Task.detached` to avoid blocking MainActor during sync operations
+- **DTO pattern**: Views receive lightweight DTOs instead of @Model objects to minimize SwiftData observation overhead
+- **Deferred relationships**: ChangeEvent.store is set during batch insert, not in initializer, to reduce ObservationRegistrar calls
 
-2. ~~**Actor isolation**~~: Resolved - `StoreService` is now `@MainActor` so it can access `ModelContext` directly.
+## Concurrency
 
-3. **ChangeEvent persistence**: Events are created but never `context.insert()`ed.
+**Rule**: Never `await StoreService` directly from `@MainActor`. Always wrap in `Task.detached`:
 
-4. **`recentPriceChange` perf**: Sorts snapshots on every access. Cache or compute once.
+```swift
+// ❌ Deadlocks
+let data = await StoreService.shared.fetch()
+
+// ✅ Safe
+let data = await Task.detached { await StoreService.shared.fetch() }.value
+```
+
+**Why**: `save()` posts `NSManagedObjectContextDidSave` synchronously (waits for observers). If main thread awaits StoreService during this, SwiftData's executor calls `performBlockAndWait`—but the actor queue is blocked waiting for notification delivery. Circular wait = deadlock.
+
+For trivial read-only fetches (single row by indexed ID), `@Environment(\.modelContext)` on main thread is fine. See `ProductDetailViewByShopifyId`.

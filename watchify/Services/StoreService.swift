@@ -4,7 +4,18 @@
 //
 
 import Foundation
+import OSLog
 import SwiftData
+
+// MARK: - Queue Diagnostics
+
+extension DispatchQueue {
+    nonisolated static var currentLabel: String {
+        String(validatingUTF8: __dispatch_queue_get_label(nil)) ?? "unknown"
+    }
+}
+
+// MARK: - Errors
 
 enum SyncError: Error, LocalizedError {
     case storeNotFound
@@ -39,33 +50,120 @@ enum SyncError: Error, LocalizedError {
     }
 }
 
-@MainActor
-@Observable
-final class StoreService {
-    private let api: ShopifyAPIProtocol
+// MARK: - StoreService
 
-    init(api: ShopifyAPIProtocol? = nil) {
-        self.api = api ?? ShopifyAPI()
+/// Background actor for all SwiftData operations.
+/// Implements ModelActor manually to support dependency injection for testing.
+/// Use `StoreService.create(container:)` to ensure background execution.
+actor StoreService: ModelActor {
+    // MARK: - Shared Instance
+
+    /// Global shared instance. Marked nonisolated to avoid MainActor hop on access
+    /// (with -default-isolation=MainActor, static vars are implicitly @MainActor).
+    nonisolated(unsafe) static var shared: StoreService!
+
+    // MARK: - ModelActor Protocol
+
+    nonisolated let modelExecutor: any ModelExecutor
+    nonisolated let modelContainer: ModelContainer
+
+    // MARK: - Dependencies
+
+    nonisolated let api: ShopifyAPIProtocol
+
+    // MARK: - Actor Diagnostics
+
+    private var methodDepth = 0
+
+    func entering(_ method: StaticString) -> CFAbsoluteTime {
+        methodDepth += 1
+        let threadInfo = ThreadInfo.current
+        Log.sync.info(">>> \(method, privacy: .public) ENTER depth=\(self.methodDepth) \(threadInfo)")
+        return CFAbsoluteTimeGetCurrent()
     }
 
-    func addStore(name: String?, domain: String, context: ModelContext) async throws -> Store {
+    func exiting(_ method: StaticString, start: CFAbsoluteTime) {
+        let elapsed = CFAbsoluteTimeGetCurrent() - start
+        // swiftlint:disable:next line_length
+        Log.sync.info("<<< \(method, privacy: .public) EXIT depth=\(self.methodDepth) dt=\(elapsed, format: .fixed(precision: 4))s")
+        methodDepth -= 1
+    }
+
+    func logContextState(_ label: StaticString) {
+        modelContext.logState(label)
+    }
+
+    // MARK: - Initialization
+
+    /// Private init - use `makeBackground(container:api:)` factory method instead.
+    private init(container: ModelContainer, api: ShopifyAPIProtocol) {
+        let context = ModelContext(container)
+        context.autosaveEnabled = false  // Prevent cascading saves during bulk work
+        self.modelExecutor = DefaultSerialModelExecutor(modelContext: context)
+        self.modelContainer = container
+        self.api = api
+
+        Log.sync.info("StoreService.init isMainThread=\(Thread.isMainThread) thread=\(Thread.current)")
+    }
+
+    /// Creates a StoreService that executes on a background thread.
+    /// CRITICAL: The actor init MUST run off-main to get a private-queue ModelContext.
+    @concurrent
+    static func makeBackground(
+        container: ModelContainer,
+        api: ShopifyAPIProtocol? = nil
+    ) async -> StoreService {
+        let resolvedAPI = api ?? ShopifyAPI()
+        return StoreService(container: container, api: resolvedAPI)
+    }
+
+    // MARK: - Store Management
+
+    /// Adds a new store and fetches its initial products.
+    /// Returns the store's UUID (model objects can't cross actor boundaries).
+    func addStore(name: String?, domain: String) async throws -> UUID {
+        let methodStart = entering("addStore")
+        defer { exiting("addStore", start: methodStart) }
+
         let products = try await api.fetchProducts(domain: domain)
 
         let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let finalName = trimmed.isEmpty ? deriveName(from: domain) : trimmed
 
         let store = Store(name: finalName, domain: domain)
-        context.insert(store)
+        modelContext.insert(store)
 
-        // Initial import - don't emit newProduct events for every product
-        _ = saveProducts(products, to: store, context: context, isInitialImport: true)
+        _ = saveProducts(products, to: store, isInitialImport: true)
         store.lastFetchedAt = Date()
+        store.updateListingCache(products: store.products)
 
-        return store
+        logContextState("addStore before save")
+        try ActorTrace.contextOp("addStore-save", context: modelContext) {
+            try modelContext.save()
+        }
+        logContextState("addStore after save")
+        return store.id
     }
 
+    /// Syncs a store by its ID, returning DTOs for any changes detected.
     @discardableResult
-    func syncStore(_ store: Store, context: ModelContext) async throws -> [ChangeEvent] {
+    // swiftlint:disable:next function_body_length
+    func syncStore(storeId: UUID) async throws -> [ChangeEventDTO] {
+        let methodStart = entering("syncStore")
+        defer { exiting("syncStore", start: methodStart) }
+
+        let startThread = ThreadInfo.current.description
+        Log.sync.info("syncStore START storeId=\(storeId) \(startThread)")
+
+        let predicate = #Predicate<Store> { $0.id == storeId }
+        var descriptor = FetchDescriptor(predicate: predicate)
+        descriptor.fetchLimit = 1
+
+        let store = try ActorTrace.contextOp("fetch-store", context: modelContext) {
+            try modelContext.fetch(descriptor).first
+        }
+        guard let store else { throw SyncError.storeNotFound }
+
         // Rate limit check: 60s minimum between syncs
         let minInterval: TimeInterval = 60
         if let lastFetch = store.lastFetchedAt {
@@ -75,262 +173,100 @@ final class StoreService {
             }
         }
 
+        store.isSyncing = true
+        let syncStart = CFAbsoluteTimeGetCurrent()
+        logContextState("syncStore before save[isSyncing]")
+        try ActorTrace.contextOp("syncStore-save-isSyncing", context: modelContext) {
+            try modelContext.save()
+        }
+        logContextState("syncStore after save[isSyncing]")
+        Log.sync.info("syncStore SAVE[isSyncing] dt=\(CFAbsoluteTimeGetCurrent() - syncStart)s")
+
+        defer {
+            store.isSyncing = false
+            let deferStart = CFAbsoluteTimeGetCurrent()
+            logContextState("syncStore before save[defer]")
+            try? ActorTrace.contextOp("syncStore-save-defer", context: modelContext) {
+                try modelContext.save()
+            }
+            logContextState("syncStore after save[defer]")
+            Log.sync.info("syncStore SAVE[defer] dt=\(CFAbsoluteTimeGetCurrent() - deferStart)s")
+        }
+
+        let fetchStart = CFAbsoluteTimeGetCurrent()
+        Log.sync.info("syncStore API_START \(ThreadInfo.current)")
         let shopifyProducts = try await api.fetchProducts(domain: store.domain)
-        let changes = saveProducts(shopifyProducts, to: store, context: context, isInitialImport: false)
+        let apiFetchTime = CFAbsoluteTimeGetCurrent() - fetchStart
+        Log.sync.info("syncStore API_END \(ThreadInfo.current) dt=\(apiFetchTime)s count=\(shopifyProducts.count)")
+
+        let saveProductsStart = CFAbsoluteTimeGetCurrent()
+        let changes = saveProducts(shopifyProducts, to: store, isInitialImport: false)
+        let saveTime = CFAbsoluteTimeGetCurrent() - saveProductsStart
+        Log.sync.info("syncStore saveProducts dt=\(saveTime)s changes=\(changes.count)")
+
+        let cacheStart = CFAbsoluteTimeGetCurrent()
         store.lastFetchedAt = Date()
-        return changes
+        store.updateListingCache(products: store.products)
+        Log.sync.info("syncStore updateCache dt=\(CFAbsoluteTimeGetCurrent() - cacheStart)s")
+
+        let finalSaveStart = CFAbsoluteTimeGetCurrent()
+        Log.sync.info("syncStore SAVE[final] START \(ThreadInfo.current)")
+        logContextState("syncStore before save[final]")
+        try ActorTrace.contextOp("syncStore-save-final", context: modelContext) {
+            try modelContext.save()
+        }
+        logContextState("syncStore after save[final]")
+        let finalSaveTime = CFAbsoluteTimeGetCurrent() - finalSaveStart
+        Log.sync.info("syncStore SAVE[final] END \(ThreadInfo.current) dt=\(finalSaveTime)s")
+
+        Log.sync.info("syncStore END totalSync=\(CFAbsoluteTimeGetCurrent() - syncStart)s")
+        return changes.map { ChangeEventDTO(from: $0) }
     }
 
-    @discardableResult
-    private func saveProducts(
-        _ shopifyProducts: [ShopifyProduct],
-        to store: Store,
-        context: ModelContext,
-        isInitialImport: Bool = false
-    ) -> [ChangeEvent] {
-        // Skip change detection on initial import
-        guard !isInitialImport else {
-            for shopifyProduct in shopifyProducts {
-                let product = createProduct(from: shopifyProduct)
-                product.store = store
-                context.insert(product)
+    /// Syncs all stores. Used by the background sync loop.
+    func syncAllStores() async {
+        let methodStart = entering("syncAllStores")
+        defer { exiting("syncAllStores", start: methodStart) }
+
+        let threadDesc = ThreadInfo.current.description
+        Log.sync.info("syncAllStores START \(threadDesc)")
+        do {
+            let stores = try ActorTrace.contextOp("fetch-stores", context: modelContext) {
+                try modelContext.fetch(FetchDescriptor<Store>())
             }
-            return []
-        }
+            guard !stores.isEmpty else { return }
 
-        let existingProducts = store.products
-        let existingByShopifyId = Dictionary(uniqueKeysWithValues: existingProducts.map { ($0.shopifyId, $0) })
-        let fetchedIds = Set(shopifyProducts.map { $0.id })
+            for store in stores {
+                // Yield between stores to allow other background work to progress
+                await Task.yield()
 
-        var changes = processFetchedProducts(
-            shopifyProducts,
-            existingByShopifyId: existingByShopifyId,
-            store: store,
-            context: context
-        )
-        changes += processRemovedProducts(existingProducts, fetchedIds: fetchedIds, store: store)
-
-        for change in changes {
-            context.insert(change)
-        }
-        return changes
-    }
-
-    private func processFetchedProducts(
-        _ shopifyProducts: [ShopifyProduct],
-        existingByShopifyId: [Int64: Product],
-        store: Store,
-        context: ModelContext
-    ) -> [ChangeEvent] {
-        var changes: [ChangeEvent] = []
-        for shopifyProduct in shopifyProducts {
-            if let existing = existingByShopifyId[shopifyProduct.id] {
-                let productChanges = detectChanges(existing: existing, fetched: shopifyProduct, store: store)
-                changes.append(contentsOf: productChanges)
-                updateProduct(existing, from: shopifyProduct, context: context)
-            } else {
-                let product = createProduct(from: shopifyProduct)
-                product.store = store
-                context.insert(product)
-                changes.append(ChangeEvent(changeType: .newProduct, productTitle: shopifyProduct.title, store: store))
-            }
-        }
-        return changes
-    }
-
-    private func processRemovedProducts(
-        _ existingProducts: [Product],
-        fetchedIds: Set<Int64>,
-        store: Store
-    ) -> [ChangeEvent] {
-        var changes: [ChangeEvent] = []
-        for existing in existingProducts where !fetchedIds.contains(existing.shopifyId) {
-            if !existing.isRemoved {
-                changes.append(ChangeEvent(changeType: .productRemoved, productTitle: existing.title, store: store))
-            }
-            existing.isRemoved = true
-        }
-        return changes
-    }
-
-    private func detectChanges(
-        existing: Product,
-        fetched: ShopifyProduct,
-        store: Store
-    ) -> [ChangeEvent] {
-        var changes: [ChangeEvent] = []
-        let existingVariants = Dictionary(uniqueKeysWithValues: existing.variants.map { ($0.shopifyId, $0) })
-
-        for fetchedVariant in fetched.variants {
-            guard let existingVariant = existingVariants[fetchedVariant.id] else { continue }
-            changes += detectVariantChanges(
-                existing: existingVariant,
-                fetched: fetchedVariant,
-                productTitle: existing.title,
-                store: store
-            )
-        }
-
-        changes += detectImageChanges(existing: existing, fetched: fetched, store: store)
-        return changes
-    }
-
-    private func detectVariantChanges(
-        existing: Variant,
-        fetched: ShopifyVariant,
-        productTitle: String,
-        store: Store
-    ) -> [ChangeEvent] {
-        var changes: [ChangeEvent] = []
-
-        if existing.price != fetched.price {
-            changes.append(makePriceChangeEvent(
-                existing: existing,
-                fetched: fetched,
-                productTitle: productTitle,
-                store: store
-            ))
-        }
-
-        if existing.available != fetched.available {
-            changes.append(ChangeEvent(
-                changeType: fetched.available ? .backInStock : .outOfStock,
-                productTitle: productTitle,
-                variantTitle: existing.title,
-                store: store
-            ))
-        }
-
-        return changes
-    }
-
-    private func makePriceChangeEvent(
-        existing: Variant,
-        fetched: ShopifyVariant,
-        productTitle: String,
-        store: Store
-    ) -> ChangeEvent {
-        let priceDrop = fetched.price < existing.price
-        let oldPrice = existing.price as NSDecimalNumber
-        let difference = abs((fetched.price - existing.price) as NSDecimalNumber as Decimal)
-        let percentChange = oldPrice.decimalValue != 0 ? (difference / oldPrice.decimalValue) * 100 : Decimal(0)
-        let magnitude: ChangeMagnitude = percentChange > 25 ? .large : percentChange > 10 ? .medium : .small
-
-        return ChangeEvent(
-            changeType: priceDrop ? .priceDropped : .priceIncreased,
-            productTitle: productTitle,
-            variantTitle: existing.title,
-            oldValue: formatPrice(existing.price),
-            newValue: formatPrice(fetched.price),
-            priceChange: fetched.price - existing.price,
-            magnitude: magnitude,
-            store: store
-        )
-    }
-
-    private func detectImageChanges(existing: Product, fetched: ShopifyProduct, store: Store) -> [ChangeEvent] {
-        let fetchedURLs = fetched.images.map { $0.src }
-        guard existing.imageURLs != fetchedURLs else { return [] }
-        let oldCount = existing.imageURLs.count, newCount = fetchedURLs.count
-        guard oldCount != newCount else { return [] }
-
-        return [ChangeEvent(
-            changeType: .imagesChanged,
-            productTitle: existing.title,
-            oldValue: "\(oldCount) images",
-            newValue: "\(newCount) images",
-            store: store
-        )]
-    }
-
-    private func formatPrice(_ price: Decimal) -> String {
-        price.formatted(.currency(code: "USD"))
-    }
-
-    private func createProduct(from shopify: ShopifyProduct) -> Product {
-        let product = Product(
-            shopifyId: shopify.id,
-            handle: shopify.handle,
-            title: shopify.title,
-            vendor: shopify.vendor,
-            productType: shopify.productType
-        )
-
-        product.imageURLs = shopify.images.map { $0.src }
-
-        for shopifyVariant in shopify.variants {
-            let variant = Variant(
-                shopifyId: shopifyVariant.id,
-                title: shopifyVariant.title,
-                sku: shopifyVariant.sku,
-                price: shopifyVariant.price,
-                compareAtPrice: shopifyVariant.compareAtPrice,
-                available: shopifyVariant.available,
-                position: shopifyVariant.position
-            )
-            variant.product = product
-            product.variants.append(variant)
-        }
-
-        return product
-    }
-
-    private func updateProduct(_ product: Product, from shopify: ShopifyProduct, context: ModelContext) {
-        product.title = shopify.title
-        product.handle = shopify.handle
-        product.vendor = shopify.vendor
-        product.productType = shopify.productType
-        product.lastSeenAt = Date()
-        product.isRemoved = false
-
-        // Update images - simple array replacement
-        product.imageURLs = shopify.images.map { $0.src }
-
-        let existingVariants = Dictionary(uniqueKeysWithValues: product.variants.map { ($0.shopifyId, $0) })
-        let fetchedVariantIds = Set(shopify.variants.map { $0.id })
-
-        for shopifyVariant in shopify.variants {
-            if let existing = existingVariants[shopifyVariant.id] {
-                // Create snapshot BEFORE modifying values if price or availability changed
-                if existing.price != shopifyVariant.price ||
-                   existing.compareAtPrice != shopifyVariant.compareAtPrice ||
-                   existing.available != shopifyVariant.available {
-                    let snapshot = VariantSnapshot(
-                        price: existing.price,
-                        compareAtPrice: existing.compareAtPrice,
-                        available: existing.available
-                    )
-                    snapshot.variant = existing
-                    existing.snapshots.append(snapshot)
-                    context.insert(snapshot)
+                do {
+                    try await syncStore(storeId: store.id)
+                } catch {
+                    Log.sync.error("Failed to sync \(store.name): \(error)")
                 }
-
-                // Now update the variant with new values
-                existing.title = shopifyVariant.title
-                existing.sku = shopifyVariant.sku
-                existing.price = shopifyVariant.price
-                existing.compareAtPrice = shopifyVariant.compareAtPrice
-                existing.available = shopifyVariant.available
-                existing.position = shopifyVariant.position
-            } else {
-                let variant = Variant(
-                    shopifyId: shopifyVariant.id,
-                    title: shopifyVariant.title,
-                    sku: shopifyVariant.sku,
-                    price: shopifyVariant.price,
-                    compareAtPrice: shopifyVariant.compareAtPrice,
-                    available: shopifyVariant.available,
-                    position: shopifyVariant.position
-                )
-                variant.product = product
-                product.variants.append(variant)
             }
-        }
 
-        for existing in product.variants where !fetchedVariantIds.contains(existing.shopifyId) {
-            context.delete(existing)
+            // Auto-delete old events if enabled
+            if UserDefaults.standard.bool(forKey: "autoDeleteEvents") {
+                let days = UserDefaults.standard.integer(forKey: "eventRetentionDays")
+                if days > 0,
+                   let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: Date()) {
+                    let predicate = #Predicate<ChangeEvent> { $0.occurredAt < cutoff }
+                    _ = try? ActorTrace.contextOp("delete-old-events", context: modelContext) {
+                        try modelContext.delete(model: ChangeEvent.self, where: predicate)
+                    }
+                }
+            }
+
+            let endThreadDesc = ThreadInfo.current.description
+            Log.sync.info("syncAllStores END \(endThreadDesc)")
+        } catch {
+            Log.sync.error("Failed to fetch stores: \(error)")
         }
     }
+
+    // MARK: - Private Helpers
 
     private func deriveName(from domain: String) -> String {
         domain.split(separator: ".").first.map(String.init) ?? domain

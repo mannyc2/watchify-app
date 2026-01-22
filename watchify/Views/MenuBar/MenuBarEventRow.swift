@@ -1,12 +1,15 @@
 //
-//  MenuBarEventRow.swift
+//  MenuBarEventRowDTO.swift
 //  watchify
 //
 
 import SwiftUI
 
-struct MenuBarEventRow: View {
-    @Bindable var event: ChangeEvent
+/// Menu bar event row that displays a ChangeEventDTO (Sendable).
+/// Used with MenuBarViewModel for background-fetched data.
+struct MenuBarEventRowDTO: View {
+    let event: ChangeEventDTO
+    let onAppear: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
@@ -53,7 +56,7 @@ struct MenuBarEventRow: View {
         .contentShape(Rectangle())
         .onAppear {
             if !event.isRead {
-                event.isRead = true
+                onAppear()
             }
         }
     }
@@ -73,37 +76,67 @@ struct MenuBarEventRow: View {
 // MARK: - Previews
 
 #Preview("Price Dropped") {
-    MenuBarEventRow(event: ChangeEvent(
-        changeType: .priceDropped,
-        productTitle: "Wool Runners",
-        variantTitle: "Size 10 / Natural White",
-        oldValue: "$110",
-        newValue: "$89",
-        priceChange: -21
-    ))
+    MenuBarEventRowDTO(
+        event: ChangeEventDTO(
+            id: UUID(),
+            occurredAt: Date(),
+            changeType: .priceDropped,
+            productTitle: "Wool Runners",
+            variantTitle: "Size 10 / Natural White",
+            oldValue: "$110",
+            newValue: "$89",
+            priceChange: -21,
+            isRead: false,
+            magnitude: .medium,
+            storeId: nil,
+            storeName: nil
+        ),
+        onAppear: {}
+    )
     .frame(width: 340)
     .padding()
 }
 
 #Preview("Back In Stock") {
-    MenuBarEventRow(event: ChangeEvent(
-        changeType: .backInStock,
-        productTitle: "Tree Dashers",
-        variantTitle: "Size 9 / Thunder"
-    ))
+    MenuBarEventRowDTO(
+        event: ChangeEventDTO(
+            id: UUID(),
+            occurredAt: Date(),
+            changeType: .backInStock,
+            productTitle: "Tree Dashers",
+            variantTitle: "Size 9 / Thunder",
+            oldValue: nil,
+            newValue: nil,
+            priceChange: nil,
+            isRead: false,
+            magnitude: .medium,
+            storeId: nil,
+            storeName: nil
+        ),
+        onAppear: {}
+    )
     .frame(width: 340)
     .padding()
 }
 
 #Preview("Read Event") {
-    let event = ChangeEvent(
-        changeType: .priceDropped,
-        productTitle: "Wool Loungers",
-        newValue: "$79",
-        priceChange: -16
+    MenuBarEventRowDTO(
+        event: ChangeEventDTO(
+            id: UUID(),
+            occurredAt: Date(),
+            changeType: .priceDropped,
+            productTitle: "Wool Loungers",
+            variantTitle: nil,
+            oldValue: nil,
+            newValue: "$79",
+            priceChange: -16,
+            isRead: true,
+            magnitude: .medium,
+            storeId: nil,
+            storeName: nil
+        ),
+        onAppear: {}
     )
-    event.isRead = true
-    return MenuBarEventRow(event: event)
-        .frame(width: 340)
-        .padding()
+    .frame(width: 340)
+    .padding()
 }

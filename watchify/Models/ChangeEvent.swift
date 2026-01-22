@@ -45,7 +45,7 @@ final class ChangeEvent {
     }
 }
 
-enum ChangeType: String, Codable {
+enum ChangeType: String, Codable, Sendable {
     case priceDropped
     case priceIncreased
     case backInStock
@@ -55,7 +55,7 @@ enum ChangeType: String, Codable {
     case imagesChanged
 }
 
-enum ChangeMagnitude: String, Codable {
+enum ChangeMagnitude: String, Codable, Sendable {
     case small    // < 10%
     case medium   // 10-25%
     case large    // > 25%

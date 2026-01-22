@@ -7,12 +7,41 @@ import Foundation
 import UserNotifications
 
 @MainActor
+protocol NotificationCenterProtocol {
+    func requestAuthorization(options: UNAuthorizationOptions) async throws -> Bool
+    func authorizationStatus() async -> UNAuthorizationStatus
+    func add(_ request: UNNotificationRequest) async throws
+}
+
+private struct LiveNotificationCenter: NotificationCenterProtocol {
+    let center: UNUserNotificationCenter
+
+    init(center: UNUserNotificationCenter = .current()) {
+        self.center = center
+    }
+
+    func requestAuthorization(options: UNAuthorizationOptions) async throws -> Bool {
+        try await center.requestAuthorization(options: options)
+    }
+
+    func authorizationStatus() async -> UNAuthorizationStatus {
+        await center.notificationSettings().authorizationStatus
+    }
+
+    func add(_ request: UNNotificationRequest) async throws {
+        try await center.add(request)
+    }
+}
+
+@MainActor
 final class NotificationService {
-    static let shared = NotificationService()
+    static let shared = NotificationService(center: LiveNotificationCenter())
 
-    private let center = UNUserNotificationCenter.current()
+    private let center: any NotificationCenterProtocol
 
-    private init() {}
+    init(center: any NotificationCenterProtocol) {
+        self.center = center
+    }
 
     func requestPermission() async -> Bool {
         do {
@@ -26,7 +55,7 @@ final class NotificationService {
 
     /// Checks current authorization status without prompting
     func authorizationStatus() async -> UNAuthorizationStatus {
-        await center.notificationSettings().authorizationStatus
+        await center.authorizationStatus()
     }
 
     /// Request permission only if not yet determined
@@ -43,7 +72,7 @@ final class NotificationService {
     }
 
     /// Sends notification, requesting permission first if needed (contextual)
-    func sendIfAuthorized(for changes: [ChangeEvent]) async {
+    func sendIfAuthorized(for changes: [ChangeEventDTO]) async {
         guard !changes.isEmpty else { return }
         let authorized = await requestPermissionIfNeeded()
         if authorized {
@@ -51,7 +80,7 @@ final class NotificationService {
         }
     }
 
-    func send(for changes: [ChangeEvent]) async {
+    func send(for changes: [ChangeEventDTO]) async {
         guard !changes.isEmpty else { return }
 
         // Check master toggle - default to true if not set
@@ -61,14 +90,14 @@ final class NotificationService {
             return
         }
 
-        let settings = await center.notificationSettings()
-        guard settings.authorizationStatus == .authorized else {
+        let status = await center.authorizationStatus()
+        guard status == .authorized else {
             print("[NotificationService] Not authorized to send notifications")
             return
         }
 
         // Group changes by store
-        let groupedByStore = Dictionary(grouping: changes) { $0.store?.id }
+        let groupedByStore = Dictionary(grouping: changes) { $0.storeId }
 
         for (_, storeChanges) in groupedByStore {
             // Filter by enabled change types and threshold
@@ -78,9 +107,10 @@ final class NotificationService {
             guard !filteredChanges.isEmpty else { continue }
             let content = UNMutableNotificationContent()
 
-            if let store = filteredChanges.first?.store {
-                content.title = store.name
-                content.threadIdentifier = store.id.uuidString
+            if let storeName = filteredChanges.first?.storeName,
+               let storeId = filteredChanges.first?.storeId {
+                content.title = storeName
+                content.threadIdentifier = storeId.uuidString
             }
             // If no store, leave title empty - system shows app name per HIG
 
@@ -103,7 +133,7 @@ final class NotificationService {
         }
     }
 
-    private func formatBody(for changes: [ChangeEvent]) -> String {
+    private func formatBody(for changes: [ChangeEventDTO]) -> String {
         let counts = countByType(changes)
         var parts: [String] = []
 
@@ -133,7 +163,7 @@ final class NotificationService {
         return parts.joined(separator: ", ")
     }
 
-    private func countByType(_ changes: [ChangeEvent]) -> [ChangeType: Int] {
+    private func countByType(_ changes: [ChangeEventDTO]) -> [ChangeType: Int] {
         var counts: [ChangeType: Int] = [:]
         for change in changes {
             counts[change.changeType, default: 0] += 1
@@ -142,7 +172,7 @@ final class NotificationService {
     }
 
     /// Returns priority level for a single change (2 = high, 1 = normal, 0 = low).
-    private func priorityLevel(for change: ChangeEvent) -> Int {
+    private func priorityLevel(for change: ChangeEventDTO) -> Int {
         switch change.changeType {
         case .backInStock:
             return 2
@@ -157,7 +187,7 @@ final class NotificationService {
 
     /// Determines the interruption level for a group of changes.
     /// Uses highest priority: timeSensitive > active > passive
-    func determinePriority(for changes: [ChangeEvent]) -> UNNotificationInterruptionLevel {
+    func determinePriority(for changes: [ChangeEventDTO]) -> UNNotificationInterruptionLevel {
         let maxPriority = changes.map { priorityLevel(for: $0) }.max() ?? 0
         switch maxPriority {
         case 2: return .timeSensitive
@@ -184,7 +214,7 @@ final class NotificationService {
         return UserDefaults.standard.bool(forKey: key)
     }
 
-    private func meetsThreshold(_ change: ChangeEvent) -> Bool {
+    private func meetsThreshold(_ change: ChangeEventDTO) -> Bool {
         // Non-price changes always pass
         guard change.changeType == .priceDropped || change.changeType == .priceIncreased else {
             return true

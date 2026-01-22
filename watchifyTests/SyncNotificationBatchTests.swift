@@ -6,6 +6,7 @@
 import Foundation
 import SwiftData
 import Testing
+import UserNotifications
 @testable import watchify
 
 // MARK: - Batch and Grouping Tests
@@ -13,44 +14,12 @@ import Testing
 @Suite("Sync Notification Batch & Grouping")
 struct SyncNotificationBatchTests {
 
-    // MARK: - Shared Test Context
-
-    @MainActor
-    final class TestContext {
-        let container: ModelContainer
-        let context: ModelContext
-        let mockAPI: MockShopifyAPI
-        let service: StoreService
-
-        init() throws {
-            let schema = Schema([Store.self, Product.self, Variant.self, VariantSnapshot.self, ChangeEvent.self])
-            let config = ModelConfiguration(isStoredInMemoryOnly: true)
-            self.container = try ModelContainer(for: schema, configurations: config)
-            self.context = container.mainContext
-            self.mockAPI = MockShopifyAPI()
-            self.service = StoreService(api: mockAPI)
-        }
-
-        func addStore(
-            name: String = "Test Store",
-            domain: String = "test.myshopify.com",
-            products: [ShopifyProduct]
-        ) async throws -> Store {
-            await mockAPI.setProducts(products)
-            return try await service.addStore(name: name, domain: domain, context: context)
-        }
-
-        func clearRateLimit(for store: Store) {
-            store.lastFetchedAt = Date.distantPast
-        }
-    }
-
     // MARK: - Test: Notification Grouping by Store
 
     @Test("changes from multiple stores produce separate groups", .tags(.syncNotifications))
     @MainActor
     func changesFromMultipleStoresProduceSeparateGroups() async throws {
-        let ctx = try TestContext()
+        let ctx = try await StoreServiceTestContext()
 
         // Create first store with a product
         let store1 = try await ctx.addStore(
@@ -60,13 +29,10 @@ struct SyncNotificationBatchTests {
         )
 
         // Create second store with a product
-        await ctx.mockAPI.setProducts([
-            .mock(id: 2, title: "Product B", variants: [.mock(id: 200, price: 50.00)])
-        ])
-        let store2 = try await ctx.service.addStore(
+        let store2 = try await ctx.addStore(
             name: "Store 2",
             domain: "store2.myshopify.com",
-            context: ctx.context
+            products: [.mock(id: 2, title: "Product B", variants: [.mock(id: 200, price: 50.00)])]
         )
 
         // Price changes on store1
@@ -74,30 +40,39 @@ struct SyncNotificationBatchTests {
             .mock(id: 1, title: "Product A", variants: [.mock(id: 100, price: 80.00)])
         ])
         ctx.clearRateLimit(for: store1)
-        let changes1 = try await ctx.service.syncStore(store1, context: ctx.context)
+        let changes1 = try await ctx.service.syncStore(storeId: store1.id)
 
         // Price changes on store2
         await ctx.mockAPI.setProducts([
             .mock(id: 2, title: "Product B", variants: [.mock(id: 200, price: 40.00)])
         ])
         ctx.clearRateLimit(for: store2)
-        let changes2 = try await ctx.service.syncStore(store2, context: ctx.context)
+        let changes2 = try await ctx.service.syncStore(storeId: store2.id)
 
         // Combine all changes (simulating aggregated sync)
         let allChanges = changes1 + changes2
 
-        // Group by store (same logic as NotificationService)
-        let groupedByStore = Dictionary(grouping: allChanges) { $0.store?.id }
+        #expect(allChanges.count == 2)
+        #expect(changes1.count == 1)
+        #expect(changes2.count == 1)
 
-        #expect(groupedByStore.count == 2)
-        #expect(groupedByStore[store1.id]?.count == 1)
-        #expect(groupedByStore[store2.id]?.count == 1)
+        await withNotificationDefaults {
+            let fakeCenter = FakeNotificationCenter()
+            fakeCenter.currentAuthorizationStatus = .authorized
+            let service = NotificationService(center: fakeCenter)
+            await service.send(for: allChanges)
+
+            #expect(fakeCenter.addedRequests.count == 2)
+            let threadIds = Set(fakeCenter.addedRequests.map { $0.content.threadIdentifier })
+            #expect(threadIds.contains(store1.id.uuidString))
+            #expect(threadIds.contains(store2.id.uuidString))
+        }
     }
 
     @Test("all changes from single store group together", .tags(.syncNotifications))
     @MainActor
     func allChangesFromSingleStoreGroupTogether() async throws {
-        let ctx = try TestContext()
+        let ctx = try await StoreServiceTestContext()
 
         // Create store with multiple products
         let store = try await ctx.addStore(
@@ -124,14 +99,20 @@ struct SyncNotificationBatchTests {
         ])
 
         ctx.clearRateLimit(for: store)
-        let changes = try await ctx.service.syncStore(store, context: ctx.context)
-
-        // Group by store
-        let groupedByStore = Dictionary(grouping: changes) { $0.store?.id }
+        let changes = try await ctx.service.syncStore(storeId: store.id)
 
         #expect(changes.count == 2)  // price drop + out of stock
-        #expect(groupedByStore.count == 1)  // all from one store
-        #expect(groupedByStore[store.id]?.count == 2)
+
+        try await withNotificationDefaults {
+            let fakeCenter = FakeNotificationCenter()
+            fakeCenter.currentAuthorizationStatus = .authorized
+            let service = NotificationService(center: fakeCenter)
+            await service.send(for: changes)
+
+            #expect(fakeCenter.addedRequests.count == 1)
+            let request = try #require(fakeCenter.addedRequests.first)
+            #expect(request.content.threadIdentifier == store.id.uuidString)
+        }
     }
 
     @Test("grouping dictionary handles nil store gracefully", .tags(.syncNotifications))

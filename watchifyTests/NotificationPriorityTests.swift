@@ -18,7 +18,7 @@ struct NotificationPriorityTests {
     @Test("back in stock triggers timeSensitive priority")
     @MainActor
     func backInStockTriggersTimeSensitive() {
-        let change = ChangeEvent(
+        let change = ChangeEventDTO(
             changeType: .backInStock,
             productTitle: "Test Product",
             variantTitle: "Default"
@@ -31,7 +31,7 @@ struct NotificationPriorityTests {
     @Test("large price drop triggers timeSensitive priority")
     @MainActor
     func largePriceDropTriggersTimeSensitive() {
-        let change = ChangeEvent(
+        let change = ChangeEventDTO(
             changeType: .priceDropped,
             productTitle: "Test Product",
             variantTitle: "Default",
@@ -50,7 +50,7 @@ struct NotificationPriorityTests {
     @Test("medium price drop triggers active priority")
     @MainActor
     func mediumPriceDropTriggersActive() {
-        let change = ChangeEvent(
+        let change = ChangeEventDTO(
             changeType: .priceDropped,
             productTitle: "Test Product",
             variantTitle: "Default",
@@ -67,7 +67,7 @@ struct NotificationPriorityTests {
     @Test("out of stock triggers active priority")
     @MainActor
     func outOfStockTriggersActive() {
-        let change = ChangeEvent(
+        let change = ChangeEventDTO(
             changeType: .outOfStock,
             productTitle: "Test Product",
             variantTitle: "Default"
@@ -80,7 +80,7 @@ struct NotificationPriorityTests {
     @Test("new product triggers active priority")
     @MainActor
     func newProductTriggersActive() {
-        let change = ChangeEvent(
+        let change = ChangeEventDTO(
             changeType: .newProduct,
             productTitle: "New Product"
         )
@@ -92,7 +92,7 @@ struct NotificationPriorityTests {
     @Test("price increase triggers active priority")
     @MainActor
     func priceIncreaseTriggersActive() {
-        let change = ChangeEvent(
+        let change = ChangeEventDTO(
             changeType: .priceIncreased,
             productTitle: "Test Product",
             variantTitle: "Default",
@@ -106,7 +106,7 @@ struct NotificationPriorityTests {
     @Test("product removed triggers active priority")
     @MainActor
     func productRemovedTriggersActive() {
-        let change = ChangeEvent(
+        let change = ChangeEventDTO(
             changeType: .productRemoved,
             productTitle: "Removed Product"
         )
@@ -120,7 +120,7 @@ struct NotificationPriorityTests {
     @Test("small price drop triggers passive priority")
     @MainActor
     func smallPriceDropTriggersPassive() {
-        let change = ChangeEvent(
+        let change = ChangeEventDTO(
             changeType: .priceDropped,
             productTitle: "Test Product",
             variantTitle: "Default",
@@ -137,7 +137,7 @@ struct NotificationPriorityTests {
     @Test("image change triggers passive priority")
     @MainActor
     func imageChangeTriggersPassive() {
-        let change = ChangeEvent(
+        let change = ChangeEventDTO(
             changeType: .imagesChanged,
             productTitle: "Test Product"
         )
@@ -151,13 +151,13 @@ struct NotificationPriorityTests {
     @Test("mixed changes use highest priority")
     @MainActor
     func mixedChangesUseHighestPriority() {
-        let smallPriceDrop = ChangeEvent(
+        let smallPriceDrop = ChangeEventDTO(
             changeType: .priceDropped,
             productTitle: "Product 1",
             variantTitle: "Default",
             magnitude: .small
         )
-        let backInStock = ChangeEvent(
+        let backInStock = ChangeEventDTO(
             changeType: .backInStock,
             productTitle: "Product 2",
             variantTitle: "Default"
@@ -177,12 +177,12 @@ struct NotificationPriorityTests {
     @Test("normal and low priority changes use normal priority")
     @MainActor
     func normalAndLowPriorityUsesNormal() {
-        let smallPriceDrop = ChangeEvent(
+        let smallPriceDrop = ChangeEventDTO(
             changeType: .priceDropped,
             productTitle: "Product 1",
             magnitude: .small
         )
-        let outOfStock = ChangeEvent(
+        let outOfStock = ChangeEventDTO(
             changeType: .outOfStock,
             productTitle: "Product 2",
             variantTitle: "Default"

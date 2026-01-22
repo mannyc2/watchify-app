@@ -1,6 +1,17 @@
 # Views
 
-SwiftUI views with Liquid Glass design.
+SwiftUI views with Liquid Glass design. Complex views use ViewModels for state management and communicate with StoreService via DTOs.
+
+## Architecture
+
+```
+View (@MainActor)
+  └── ViewModel (@MainActor, @Observable)
+      └── StoreService (actor)
+          └── Returns DTOs (Sendable)
+```
+
+All views that fetch data use ViewModels. No views use `@Query` directly to avoid main-thread hangs during sync.
 
 ## Layout
 
@@ -35,24 +46,116 @@ WatchifyApp
 │           └── Detail
 │               ├── OverviewView
 │               │   └── StoreCard (per store)
-│               ├── StoreDetailView
+│               ├── StoreDetailView + StoreDetailViewModel
 │               │   └── ProductGrid
-│               │       └── ProductCard (per product)
+│               │       └── ProductCardDTO (per product)
 │               ├── ProductDetailView
 │               │   ├── VariantRow
 │               │   └── PriceHistorySection
 │               │       ├── PriceHistoryChart
 │               │       └── PriceHistoryRow
-│               └── ActivityView
-│                   └── ChangeEventRow (per event)
+│               └── ActivityView + ActivityViewModel
+│                   └── ActivityRowDTO (per event)
 ├── MenuBarExtra
-│   └── MenuBarView
+│   └── MenuBarView + MenuBarViewModel
+│       └── MenuBarEventRowDTO (per event)
 └── Settings
     └── SettingsView
         ├── GeneralSettingsTab
         ├── NotificationSettingsTab
         └── DataSettingsTab
 ```
+
+## ViewModels
+
+ViewModels are `@MainActor @Observable` classes that manage state for views. They communicate with `StoreService` (a background actor) via DTOs, using `Task.detached` to avoid deadlocks.
+
+### StoreListViewModel
+
+Shared ViewModel for ContentView, SidebarView, and OverviewView. Manages store list and unread count.
+
+```swift
+@MainActor @Observable
+final class StoreListViewModel {
+    private(set) var stores: [StoreDTO] = []
+    private(set) var unreadCount: Int = 0
+
+    func configure()           // Sets up notification observer
+    func loadInitial() async
+    func refresh() async
+    func deleteStore(id:) async
+}
+```
+
+### StoreDetailViewModel
+
+Manages product list, filters, and sync for `StoreDetailView`.
+
+```swift
+@MainActor @Observable
+final class StoreDetailViewModel {
+    // State
+    private(set) var products: [ProductDTO] = []
+    private(set) var isLoading = false
+    var searchText: String
+    var stockScope: StockScope
+    var sortOrder: ProductSort
+
+    // Store metadata
+    let storeId: UUID
+    private(set) var storeName: String
+    private(set) var isSyncing: Bool
+
+    // Actions
+    func loadInitial() async
+    func fetchProducts() async
+    func sync() async
+}
+```
+
+### ActivityViewModel
+
+Manages event list with filtering, grouping, and mark-read for `ActivityView`.
+
+```swift
+@MainActor @Observable
+final class ActivityViewModel {
+    // State
+    private(set) var events: [ChangeEventDTO] = []
+    private(set) var listItems: [ActivityListItem] = []  // Flattened: headers + events
+    var selectedStoreId: UUID?
+    var selectedType: TypeFilter
+    var dateRange: DateRange
+
+    // Actions
+    func loadInitial() async
+    func fetchEvents(reset:) async
+    func markEventRead(id:)
+    func markAllRead()
+}
+```
+
+### MenuBarViewModel
+
+Manages recent/unread events for `MenuBarView`.
+
+```swift
+@MainActor @Observable
+final class MenuBarViewModel {
+    private(set) var events: [ChangeEventDTO] = []
+    private(set) var unreadCount: Int = 0
+
+    func loadEvents() async
+    func markAllRead() async
+}
+```
+
+### Why ViewModels?
+
+1. **Actor isolation**: Views are `@MainActor`, but `StoreService` is a background actor. ViewModels bridge the gap.
+2. **State management**: Complex filtering, sorting, and grouping logic lives in ViewModels, not views.
+3. **DTOs**: ViewModels receive `Sendable` DTOs from StoreService, avoiding `@Model` observation overhead.
+4. **Testability**: ViewModels can be unit tested without SwiftUI.
 
 ## Key Views
 
@@ -64,7 +167,7 @@ Main container. NavigationSplitView with toolbar.
 struct ContentView: View {
     @State private var selectedStore: Store?
     @State private var showingAddStore = false
-    
+
     var body: some View {
         NavigationSplitView {
             SidebarView(selectedStore: $selectedStore)
@@ -89,7 +192,7 @@ Glass card with hover interaction.
 struct ProductCard: View {
     let product: Product
     @State private var isHovering = false
-    
+
     var body: some View {
         VStack(alignment: .leading) {
             AsyncImage(url: product.imageURL) { ... }
@@ -123,7 +226,7 @@ Swift Charts with glass background.
 ```swift
 struct PriceHistoryChart: View {
     let variant: Variant
-    
+
     var body: some View {
         Chart {
             ForEach(variant.snapshots.sorted(by: { $0.capturedAt < $1.capturedAt }), id: \.capturedAt) { snapshot in
@@ -132,7 +235,7 @@ struct PriceHistoryChart: View {
                     y: .value("Price", snapshot.price)
                 )
                 .foregroundStyle(.blue.gradient)
-                
+
                 AreaMark(...)
                     .foregroundStyle(.blue.opacity(0.1).gradient)
             }
@@ -148,34 +251,25 @@ struct PriceHistoryChart: View {
 
 ### ActivityView
 
-Full-page activity view with filters and date grouping.
+Full-page activity view with filters and date grouping. Uses `ActivityViewModel`.
 
 ```swift
 struct ActivityView: View {
-    @Query(sort: \ChangeEvent.occurredAt, order: .reverse)
-    private var allEvents: [ChangeEvent]
-
-    @State private var selectedStore: Store?
-    @State private var selectedType: TypeFilter = .all
-    @State private var dateRange: DateRange = .all
+    @State private var viewModel: ActivityViewModel?
 
     var body: some View {
-        VStack(spacing: 0) {
-            filterBar  // Store, Type, Date pickers + "Mark All Read" + "Clear"
-            Divider()
-
-            if filteredEvents.isEmpty {
-                ContentUnavailableView("No Activity", ...)
+        Group {
+            if let viewModel {
+                ActivityContentView(viewModel: viewModel)
             } else {
-                List {
-                    ForEach(groupedEvents, id: \.date) { group in
-                        Section(header: Text(sectionHeader(for: group.date))) {
-                            ForEach(group.events) { event in
-                                ActivityRow(event: event)
-                            }
-                        }
-                    }
-                }
+                ProgressView()
+            }
+        }
+        .task {
+            if viewModel == nil {
+                let activityVM = ActivityViewModel()
+                viewModel = activityVM
+                await activityVM.loadInitial()
             }
         }
     }
@@ -186,74 +280,49 @@ struct ActivityView: View {
 - Filter by store, type (Price/Stock/Product), and date range (Today/7 Days/30 Days/All)
 - "Mark All Read" button marks all filtered events as read
 - Events grouped by date with "Today"/"Yesterday"/date headers
+- Infinite scroll with pagination
 
 ### MenuBarView
 
-Quick access from menu bar. Uses `.menuBarExtraStyle(.window)` for rich content.
+Quick access from menu bar. Uses `.menuBarExtraStyle(.window)` for rich content and `MenuBarViewModel`.
 
 ```swift
 struct MenuBarView: View {
-    @Query(filter: #Predicate<ChangeEvent> { !$0.isRead }, sort: \ChangeEvent.occurredAt, order: .reverse)
-    private var unreadEvents: [ChangeEvent]
-
-    @Query(sort: \ChangeEvent.occurredAt, order: .reverse)
-    private var allEvents: [ChangeEvent]
-
-    // Show unread if any, otherwise recent 10
-    private var displayEvents: [ChangeEvent] {
-        unreadEvents.isEmpty ? Array(allEvents.prefix(10)) : Array(unreadEvents.prefix(10))
-    }
+    @State private var viewModel: MenuBarViewModel?
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            HStack {
-                Text("Recent Changes").font(.headline)
-                Spacer()
-                if !unreadEvents.isEmpty {
-                    Button("Mark All Read") { markAllRead() }
-                }
-            }
-            .padding()
-
-            Divider()
-
-            // Event list
-            if displayEvents.isEmpty {
-                ContentUnavailableView("No Changes Yet", ...)
+        Group {
+            if let viewModel {
+                MenuBarContentView(viewModel: viewModel)
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(displayEvents) { event in
-                            MenuBarEventRow(event: event)
-                            Divider()
-                        }
-                    }
-                }
+                ProgressView()
             }
-
-            Divider()
-
-            // Action buttons
-            HStack {
-                Button("Open Watchify") { openWindow(id: "main") }
-                Button("Quit") { NSApplication.shared.terminate(nil) }
-            }
-            .padding()
-            .background(.regularMaterial)
         }
-        .frame(width: 340, height: 400)
+        .task {
+            if viewModel == nil {
+                let menuBarVM = MenuBarViewModel()
+                viewModel = menuBarVM
+                await menuBarVM.loadEvents()
+            }
+        }
     }
 }
 ```
 
+**Features**:
+- Shows unread events if any, otherwise recent 10
+- "Mark All Read" button
+- "Open Watchify" and "Quit" actions
+- Fixed 340x400 window size
+
 ### MenuBarEventRow
 
-Compact event row optimized for menu bar display.
+Compact event row optimized for menu bar display. Uses `ChangeEventDTO` (Sendable).
 
 ```swift
-struct MenuBarEventRow: View {
-    @Bindable var event: ChangeEvent
+struct MenuBarEventRowDTO: View {
+    let event: ChangeEventDTO
+    let onMarkRead: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
@@ -266,21 +335,15 @@ struct MenuBarEventRow: View {
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(event.productTitle)
-                    .font(.subheadline.weight(.medium))
                 if let priceChange = event.priceChange {
-                    HStack { Text(event.newValue!); PriceChangeIndicator(change: priceChange) }
-                } else if let desc = changeDescription {
-                    Text(desc).font(.caption).foregroundStyle(.secondary)
+                    HStack { Text(event.newValue ?? ""); PriceChangeIndicator(change: priceChange) }
                 }
             }
 
             Spacer()
             Text(event.occurredAt, format: .relative(presentation: .named))
-                .font(.caption2).foregroundStyle(.tertiary)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .onAppear { if !event.isRead { event.isRead = true } }
+        .onAppear { if !event.isRead { onMarkRead() } }
     }
 }
 ```
@@ -343,11 +406,12 @@ struct SettingsView: View {
 
 ### ActivityRow
 
-Displays a single change event with read/unread tracking.
+Displays a single change event with read/unread tracking. Uses `ChangeEventDTO` (Sendable).
 
 ```swift
-struct ActivityRow: View {
-    @Bindable var event: ChangeEvent  // @Bindable for mutation
+struct ActivityRowDTO: View {
+    let event: ChangeEventDTO
+    let onMarkRead: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -366,28 +430,30 @@ struct ActivityRow: View {
             Spacer()
             Text(event.occurredAt, format: .relative(presentation: .named))
         }
-        .onAppear {
-            if !event.isRead { event.isRead = true }
-        }
+        .onAppear { if !event.isRead { onMarkRead() } }
     }
 }
 ```
 
 ### SidebarView
 
-Navigation sidebar with unread badge on Activity.
+Navigation sidebar with unread badge on Activity. Uses shared `StoreListViewModel`.
 
 ```swift
 struct SidebarView: View {
-    @Query(filter: #Predicate<ChangeEvent> { !$0.isRead })
-    private var unreadEvents: [ChangeEvent]
+    @Bindable var viewModel: StoreListViewModel
+    @Binding var selection: SidebarSelection?
 
     var body: some View {
         List(selection: $selection) {
             Label("Overview", systemImage: "square.grid.2x2")
             Label("Activity", systemImage: "clock.arrow.circlepath")
-                .badge(unreadEvents.count)  // Shows count, hides at 0
-            Section("Stores") { ... }
+                .badge(viewModel.unreadCount)  // Shows count, hides at 0
+            Section("Stores") {
+                ForEach(viewModel.stores) { store in
+                    StoreRow(store: store)
+                }
+            }
         }
     }
 }
@@ -420,35 +486,98 @@ Used by `ActivityRow`, `StoreCard`, and `ProductCard` via the shared `Badge` com
 
 ## File Structure
 
+### Organization Principles
+
+1. **Group by feature/domain** - Co-locate related views for easier navigation
+2. **Components are generic** - Reusable pieces that aren't domain-specific go in `Components/`
+3. **DTOs stay with their views** - `ProductCardDTO` lives alongside `ProductCard`
+4. **Flat is fine for small groups** - Aim for 4-6 files per folder; don't over-nest
+5. **Preview files stay with source** - `*+Previews.swift` files live next to the view they preview
+
+### Folder Structure
+
 ```
+ViewModels/
+├── ActivityViewModel.swift
+├── MenuBarViewModel.swift
+├── StoreDetailViewModel.swift
+└── StoreListViewModel.swift
+
 Views/
-├── Sidebar/
-│   ├── SidebarView.swift
-│   └── StoreRow.swift
-├── Store/
-│   ├── StoreDetailView.swift
-│   ├── ProductCard.swift
-│   └── ProductGrid.swift
-├── Product/
-│   ├── ProductDetailView.swift
-│   ├── VariantRow.swift
-│   ├── PriceHistorySection.swift
+├── Activity/                    # Activity feed feature
+│   ├── ActivityRow.swift
+│   └── ActivityView.swift
+│
+├── Components/                  # Reusable UI primitives
+│   ├── Badge.swift
+│   ├── GlassTheme.swift
+│   ├── PriceChangeIndicator.swift
+│   └── SyncStatusView.swift
+│
+├── MenuBar/                     # Menu bar extra
+│   ├── MenuBarEventRow.swift
+│   └── MenuBarView.swift
+│
+├── Product/                     # Product-related views
 │   ├── PriceHistoryChart.swift
 │   ├── PriceHistoryRow.swift
-│   └── PriceChangeIndicator.swift
-├── Activity/
-│   ├── ActivityView.swift
-│   └── ChangeEventRow.swift
-├── Settings/
-│   ├── SettingsView.swift
+│   ├── PriceHistorySection.swift
+│   ├── ProductCard.swift
+│   ├── ProductCardDTO.swift
+│   ├── ProductDetailView.swift
+│   ├── ProductDetailView+Previews.swift
+│   ├── ProductImageCarousel.swift
+│   └── VariantRow.swift
+│
+├── Settings/                    # Settings window
+│   ├── DataSettingsTab.swift
 │   ├── GeneralSettingsTab.swift
 │   ├── NotificationSettingsTab.swift
-│   └── DataSettingsTab.swift
-├── MenuBar/
-│   ├── MenuBarView.swift
-│   └── MenuBarEventRow.swift
-└── Components/
-    ├── Badge.swift
-    ├── GlassCard.swift
-    └── EmptyStateView.swift
+│   └── SettingsView.swift
+│
+├── Store/                       # Store-related views
+│   ├── AddStoreSheet.swift
+│   ├── StoreCard.swift
+│   ├── StoreDetailView.swift
+│   └── StoreRow.swift
+│
+├── ContentView.swift            # App shell (NavigationSplitView)
+├── OverviewView.swift           # Top-level screen
+└── SidebarView.swift            # Navigation sidebar
+
+DTOs/
+├── ChangeEventDTO.swift
+├── ProductDTO.swift
+└── StoreDTO.swift
 ```
+
+### Conventions
+
+| Convention | Rationale |
+|------------|-----------|
+| Feature folders are **singular** (`Product/`, not `Products/`) | Matches Swift naming conventions |
+| **One view per file** | Easier to navigate; exceptions for tiny private helpers |
+| **DTO suffix** for display-only structs | Distinguishes from @Model types |
+| **+Previews suffix** for preview-only files | Keeps previews separate when they're large |
+| Top-level screens can stay at root | `ContentView`, `OverviewView`, `SidebarView` don't need folders |
+| `watchifyApp.swift` stays at project root | App entry point, not a view |
+
+### When to Create a New Folder
+
+Create a new feature folder when:
+- You have **3+ related views** for a domain
+- The views share common types or logic
+- The feature is distinct enough to warrant isolation
+
+Don't create a folder for:
+- A single view with no related components
+- Generic components (use `Components/` instead)
+- Views that span multiple domains (keep at root or in most relevant folder)
+
+### Adding New Views
+
+1. **Identify the domain**: Does it belong to Store, Product, Activity, etc.?
+2. **Check existing folders**: Add to an existing folder if it fits
+3. **Create folder if needed**: Only when you have 3+ related files
+4. **Include DTOs with views**: Keep `FooDTO.swift` next to `Foo.swift`
+5. **Update this doc**: Keep the file structure section current

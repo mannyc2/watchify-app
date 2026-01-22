@@ -3,20 +3,16 @@
 //  watchify
 //
 
-import SwiftData
 import SwiftUI
 
 struct AddStoreSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
     @Binding var selection: SidebarSelection?
 
     @State private var domain = ""
     @State private var name = ""
     @State private var isAdding = false
     @State private var error: String?
-
-    private let storeService = StoreService()
 
     private var normalizedDomain: String {
         var result = domain
@@ -73,12 +69,11 @@ struct AddStoreSheet: View {
         defer { isAdding = false }
 
         do {
-            let store = try await storeService.addStore(
+            let storeId = try await StoreService.shared.addStore(
                 name: name,
-                domain: normalizedDomain,
-                context: modelContext
+                domain: normalizedDomain
             )
-            selection = .store(store.id)
+            selection = .store(storeId)
             dismiss()
         } catch {
             self.error = "Not a valid Shopify store: \(error.localizedDescription)"
@@ -88,7 +83,6 @@ struct AddStoreSheet: View {
 
 #Preview("Empty Form") {
     AddStoreSheet(selection: .constant(nil))
-        .modelContainer(for: Store.self, inMemory: true)
 }
 
 #Preview("Loading State") {

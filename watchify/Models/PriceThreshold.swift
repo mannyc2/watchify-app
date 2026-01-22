@@ -31,7 +31,7 @@ enum PriceThreshold: String, CaseIterable, Codable {
     }
 
     /// Check if a change event meets this threshold
-    func isSatisfied(by change: ChangeEvent) -> Bool {
+    func isSatisfied(by change: ChangeEventDTO) -> Bool {
         // Non-price changes always pass
         guard change.changeType == .priceDropped || change.changeType == .priceIncreased else {
             return true
