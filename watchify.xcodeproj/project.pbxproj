@@ -7,6 +7,13 @@
 	objects = {
 
 /* Begin PBXContainerItemProxy section */
+		FE432BB02F22FCD5000729B3 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = FEFBC9AC2F1F0481008DF908 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = FEFBC9B32F1F0481008DF908;
+			remoteInfo = watchify;
+		};
 		FEFBC9FA2F1F239F008DF908 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = FEFBC9AC2F1F0481008DF908 /* Project object */;
@@ -17,11 +24,17 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		FE432BAA2F22FCD5000729B3 /* watchifyUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = watchifyUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		FEFBC9B42F1F0481008DF908 /* watchify.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = watchify.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FEFBC9F62F1F239F008DF908 /* watchifyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = watchifyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		FE432BAB2F22FCD5000729B3 /* watchifyUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = watchifyUITests;
+			sourceTree = "<group>";
+		};
 		FEFBC9B62F1F0481008DF908 /* watchify */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = watchify;
@@ -35,6 +48,13 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		FE432BA72F22FCD5000729B3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FEFBC9B12F1F0481008DF908 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -57,6 +77,7 @@
 			children = (
 				FEFBC9B62F1F0481008DF908 /* watchify */,
 				FEFBC9F72F1F239F008DF908 /* watchifyTests */,
+				FE432BAB2F22FCD5000729B3 /* watchifyUITests */,
 				FEFBC9B52F1F0481008DF908 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -66,6 +87,7 @@
 			children = (
 				FEFBC9B42F1F0481008DF908 /* watchify.app */,
 				FEFBC9F62F1F239F008DF908 /* watchifyTests.xctest */,
+				FE432BAA2F22FCD5000729B3 /* watchifyUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -73,6 +95,29 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		FE432BA92F22FCD5000729B3 /* watchifyUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FE432BB22F22FCD5000729B3 /* Build configuration list for PBXNativeTarget "watchifyUITests" */;
+			buildPhases = (
+				FE432BA62F22FCD5000729B3 /* Sources */,
+				FE432BA72F22FCD5000729B3 /* Frameworks */,
+				FE432BA82F22FCD5000729B3 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				FE432BB12F22FCD5000729B3 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				FE432BAB2F22FCD5000729B3 /* watchifyUITests */,
+			);
+			name = watchifyUITests;
+			packageProductDependencies = (
+			);
+			productName = watchifyUITests;
+			productReference = FE432BAA2F22FCD5000729B3 /* watchifyUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		FEFBC9B32F1F0481008DF908 /* watchify */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = FEFBC9BF2F1F0482008DF908 /* Build configuration list for PBXNativeTarget "watchify" */;
@@ -128,6 +173,10 @@
 				LastSwiftUpdateCheck = 2620;
 				LastUpgradeCheck = 2620;
 				TargetAttributes = {
+					FE432BA92F22FCD5000729B3 = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = FEFBC9B32F1F0481008DF908;
+					};
 					FEFBC9B32F1F0481008DF908 = {
 						CreatedOnToolsVersion = 26.2;
 					};
@@ -153,11 +202,19 @@
 			targets = (
 				FEFBC9B32F1F0481008DF908 /* watchify */,
 				FEFBC9F52F1F239F008DF908 /* watchifyTests */,
+				FE432BA92F22FCD5000729B3 /* watchifyUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		FE432BA82F22FCD5000729B3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FEFBC9B22F1F0481008DF908 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -175,6 +232,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		FE432BA62F22FCD5000729B3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FEFBC9B02F1F0481008DF908 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -192,6 +256,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		FE432BB12F22FCD5000729B3 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = FEFBC9B32F1F0481008DF908 /* watchify */;
+			targetProxy = FE432BB02F22FCD5000729B3 /* PBXContainerItemProxy */;
+		};
 		FEFBC9FB2F1F239F008DF908 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = FEFBC9B32F1F0481008DF908 /* watchify */;
@@ -200,6 +269,54 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		FE432BB32F22FCD5000729B3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MACOSX_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = cjpher.watchifyUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TEST_TARGET_NAME = watchify;
+				XROS_DEPLOYMENT_TARGET = 26.2;
+			};
+			name = Debug;
+		};
+		FE432BB42F22FCD5000729B3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MACOSX_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = cjpher.watchifyUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TEST_TARGET_NAME = watchify;
+				XROS_DEPLOYMENT_TARGET = 26.2;
+			};
+			name = Release;
+		};
 		FEFBC9BD2F1F0482008DF908 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -479,6 +596,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		FE432BB22F22FCD5000729B3 /* Build configuration list for PBXNativeTarget "watchifyUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FE432BB32F22FCD5000729B3 /* Debug */,
+				FE432BB42F22FCD5000729B3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		FEFBC9AF2F1F0481008DF908 /* Build configuration list for PBXProject "watchify" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

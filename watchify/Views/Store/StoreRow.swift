@@ -15,6 +15,7 @@ struct StoreRow: View {
                 .foregroundStyle(.secondary)
                 .imageScale(.medium)
                 .frame(width: 18)
+                .accessibilityHidden(true)
 
             Text(store.name)
                 .font(.body)

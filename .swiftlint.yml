@@ -1,0 +1,19 @@
+# SwiftLint Configuration for Watchify
+
+# Enable accessibility rules (disabled by default)
+opt_in_rules:
+  - accessibility_label_for_image
+  - accessibility_trait_for_button
+
+# Paths to ignore
+excluded:
+  - .build
+  - DerivedData
+  - Pods
+
+# Rule configurations
+accessibility_label_for_image:
+  severity: warning
+
+accessibility_trait_for_button:
+  severity: warning

@@ -26,7 +26,7 @@ final class StoreDetailViewModel {
 
     // Error state
     private(set) var rateLimitRetryAfter: TimeInterval?
-    private(set) var syncError: Error?
+    private(set) var syncError: SyncError?
 
     // MARK: - Filters
 
@@ -150,6 +150,13 @@ final class StoreDetailViewModel {
     func sync() async {
         rateLimitRetryAfter = nil
         syncError = nil
+
+        // Check network connectivity first
+        if !NetworkMonitor.shared.isConnected {
+            syncError = .networkUnavailable
+            return
+        }
+
         isSyncing = true
 
         let id = storeId
@@ -173,9 +180,11 @@ final class StoreDetailViewModel {
         } catch let error as SyncError {
             if case .rateLimited(let retryAfter) = error {
                 rateLimitRetryAfter = retryAfter
+            } else {
+                syncError = error
             }
         } catch {
-            syncError = error
+            syncError = SyncError.from(error)
         }
 
         isSyncing = false

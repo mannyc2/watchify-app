@@ -32,6 +32,7 @@ struct StoreCard: View {
                                 Image(systemName: "photo.on.rectangle")
                                     .font(.largeTitle)
                                     .foregroundStyle(.quaternary)
+                                    .accessibilityHidden(true)
                             }
                     } else {
                         ForEach(previewImages, id: \.self) { url in
@@ -46,6 +47,7 @@ struct StoreCard: View {
                             .frame(minWidth: 0, maxWidth: .infinity)
                             .aspectRatio(1, contentMode: .fit)
                             .clipped()
+                            .accessibilityHidden(true)
                         }
                     }
                 }
@@ -70,6 +72,7 @@ struct StoreCard: View {
         .interactiveGlassCard(isHovering: isHovering, cornerRadius: cornerRadius)
         .onHover { isHovering = $0 }
         .animation(.snappy(duration: 0.18), value: isHovering)
+        .accessibilityLabel("\(store.name), \(store.cachedProductCount) products")
     }
 }
 

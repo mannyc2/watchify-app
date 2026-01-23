@@ -31,6 +31,7 @@ struct ProductCardDTO: View {
                             Image(systemName: "photo")
                                 .font(.title2)
                                 .foregroundStyle(.quaternary)
+                                .accessibilityHidden(true)
                         }
                 }
                 .frame(height: 120)
@@ -65,6 +66,7 @@ struct ProductCardDTO: View {
         .animation(.snappy(duration: 0.18), value: isHovering)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
+        .accessibilityIdentifier("ProductCard")
     }
 
     private var accessibilityLabel: String {

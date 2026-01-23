@@ -48,6 +48,7 @@ private struct MenuBarContentView: View {
                     }
                     .buttonStyle(.glass)
                     .controlSize(.small)
+                    .accessibilityLabel("Mark all events as read")
                 }
             }
             .padding(.horizontal)
@@ -92,11 +93,13 @@ private struct MenuBarContentView: View {
                     NSApp.activate(ignoringOtherApps: true)
                 }
                 .buttonStyle(.glass)
+                .accessibilityLabel("Open Watchify main window")
 
                 Button("Quit") {
                     NSApplication.shared.terminate(nil)
                 }
                 .buttonStyle(.glass)
+                .accessibilityLabel("Quit Watchify")
             }
             .padding(.horizontal)
             .padding(.vertical, 10)

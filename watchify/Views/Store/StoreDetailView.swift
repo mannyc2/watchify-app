@@ -6,6 +6,7 @@
 import OSLog
 import SwiftData
 import SwiftUI
+import TipKit
 
 // MARK: - Enums
 
@@ -43,6 +44,7 @@ struct StoreDetailView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .focusedSceneValue(\.storeId, storeDTO.id)
         .task {
             if viewModel == nil {
                 let storeVM = StoreDetailViewModel(
@@ -66,11 +68,28 @@ private struct StoreDetailContentView: View {
     @Bindable var viewModel: StoreDetailViewModel
     let container: ModelContainer
 
+    private var isOffline: Bool {
+        !NetworkMonitor.shared.isConnected
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            if let retryAfter = viewModel.rateLimitRetryAfter {
+            if let syncError = viewModel.syncError {
+                ErrorBannerView(
+                    error: syncError,
+                    lastSyncedAt: viewModel.lastFetchedAt,
+                    onRetry: { Task { await viewModel.sync() } },
+                    onDismiss: { viewModel.dismissSyncError() }
+                )
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                .transition(.move(edge: .top).combined(with: .opacity))
+
+                Divider()
+            } else if let retryAfter = viewModel.rateLimitRetryAfter {
                 SyncStatusView(
                     retryAfter: retryAfter,
+                    lastSyncedAt: viewModel.lastFetchedAt,
                     onRetry: { Task { await viewModel.sync() } },
                     onDismiss: { viewModel.dismissRateLimitBanner() }
                 )
@@ -86,7 +105,7 @@ private struct StoreDetailContentView: View {
                     ContentUnavailableView {
                         Label("No Products", systemImage: "tray")
                     } description: {
-                        Text("This store has no products, or they haven't been synced yet.")
+                        Text("Tap Sync to fetch products from this store.")
                     } actions: {
                         Button("Sync Now") {
                             Task { await viewModel.sync() }
@@ -115,13 +134,6 @@ private struct StoreDetailContentView: View {
         }
         .navigationTitle(viewModel.storeName)
         .navigationSubtitle(viewModel.subtitleText)
-        .alert("Sync Failed", isPresented: .constant(viewModel.syncError != nil)) {
-            Button("OK") { viewModel.dismissSyncError() }
-        } message: {
-            if let error = viewModel.syncError {
-                Text(error.localizedDescription)
-            }
-        }
         .navigationDestination(for: Int64.self) { shopifyId in
             ProductDetailViewByShopifyId(shopifyId: shopifyId)
                 .modelContainer(container)
@@ -147,11 +159,16 @@ private struct StoreDetailContentView: View {
             } label: {
                 if viewModel.isSyncing {
                     ProgressView().controlSize(.small)
+                } else if isOffline {
+                    Label("Offline", systemImage: "wifi.slash")
                 } else {
                     Label("Sync", systemImage: "arrow.trianglehead.2.clockwise")
                 }
             }
-            .disabled(viewModel.isSyncing)
+            .disabled(viewModel.isSyncing || isOffline)
+            .help(isOffline ? "No internet connection" : "Refresh products from store")
+            .accessibilityLabel(isOffline ? "Offline, sync unavailable" : "Sync products from store")
+            .popoverTip(SyncTip())
         }
 
         ToolbarItem(placement: .primaryAction) {
@@ -160,6 +177,9 @@ private struct StoreDetailContentView: View {
                     Text(sort.rawValue).tag(sort)
                 }
             }
+            .help("Change product sort order")
+            .accessibilityLabel("Sort products")
+            .accessibilityValue(viewModel.sortOrder.rawValue)
         }
     }
 }
@@ -230,6 +250,28 @@ private struct ProductDetailViewByShopifyId: View {
     VStack(spacing: 0) {
         SyncStatusView(
             retryAfter: 30,
+            lastSyncedAt: Date().addingTimeInterval(-60),
+            onRetry: {},
+            onDismiss: {}
+        )
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+
+        Divider()
+
+        ContentUnavailableView {
+            Label("No Products", systemImage: "tray")
+        } description: {
+            Text("This store has no products, or they haven't been synced yet.")
+        }
+    }
+}
+
+#Preview("Error Banner") {
+    VStack(spacing: 0) {
+        ErrorBannerView(
+            error: .networkUnavailable,
+            lastSyncedAt: Date().addingTimeInterval(-3600),
             onRetry: {},
             onDismiss: {}
         )

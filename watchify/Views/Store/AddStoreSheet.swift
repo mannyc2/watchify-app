@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import TipKit
 
 struct AddStoreSheet: View {
     @Environment(\.dismiss) private var dismiss
@@ -35,15 +36,22 @@ struct AddStoreSheet: View {
         Form {
             TextField("Domain", text: $domain, prompt: Text("allbirds.com"))
                 .autocorrectionDisabled()
+                .accessibilityLabel("Store domain")
+                .accessibilityHint("Enter the Shopify store domain, for example allbirds.com")
             TextField("Name (optional)", text: $name, prompt: Text("Allbirds"))
+                .accessibilityLabel("Store name")
+                .accessibilityHint("Optional display name for the store")
 
             if let error {
                 Text(error)
                     .foregroundStyle(.red)
                     .font(.caption)
+                    .accessibilityAddTraits(.isStaticText)
             }
         }
         .formStyle(.grouped)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Add store form")
         .frame(minWidth: 300)
         .disabled(isAdding)
         .toolbar {
@@ -55,6 +63,7 @@ struct AddStoreSheet: View {
                 if isAdding {
                     ProgressView()
                         .controlSize(.small)
+                        .accessibilityLabel("Adding store")
                 } else {
                     Button("Add") { Task { await addStore() } }
                         .disabled(!canAdd)
@@ -73,6 +82,11 @@ struct AddStoreSheet: View {
                 name: name,
                 domain: normalizedDomain
             )
+
+            // Update tip state - user has added their first store
+            AddStoreTip.hasAddedStore = true
+            SyncTip.hasAddedStore = true
+
             selection = .store(storeId)
             dismiss()
         } catch {

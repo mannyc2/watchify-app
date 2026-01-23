@@ -20,6 +20,10 @@ extension DispatchQueue {
 enum SyncError: Error, LocalizedError {
     case storeNotFound
     case rateLimited(retryAfter: TimeInterval)
+    case networkUnavailable
+    case networkTimeout
+    case serverError(statusCode: Int)
+    case invalidResponse
 
     var errorDescription: String? {
         switch self {
@@ -27,6 +31,14 @@ enum SyncError: Error, LocalizedError {
             return String(localized: "Store not found")
         case .rateLimited:
             return String(localized: "Sync limited")
+        case .networkUnavailable:
+            return String(localized: "No connection")
+        case .networkTimeout:
+            return String(localized: "Connection timed out")
+        case .serverError:
+            return String(localized: "Server error")
+        case .invalidResponse:
+            return String(localized: "Invalid response")
         }
     }
 
@@ -37,6 +49,14 @@ enum SyncError: Error, LocalizedError {
         case .rateLimited(let seconds):
             let rounded = Int(seconds.rounded(.up))
             return String(localized: "Please wait \(rounded) seconds before syncing again.")
+        case .networkUnavailable:
+            return String(localized: "Your device appears to be offline.")
+        case .networkTimeout:
+            return String(localized: "The request took too long to complete.")
+        case .serverError(let statusCode):
+            return String(localized: "The server returned an error (\(statusCode)).")
+        case .invalidResponse:
+            return String(localized: "The server returned unexpected data.")
         }
     }
 
@@ -46,7 +66,64 @@ enum SyncError: Error, LocalizedError {
             return String(localized: "Check the domain and try again.")
         case .rateLimited:
             return String(localized: "Try again after the countdown completes.")
+        case .networkUnavailable:
+            return String(localized: "Check your internet connection and try again.")
+        case .networkTimeout:
+            return String(localized: "Try again when your connection improves.")
+        case .serverError:
+            return String(localized: "The store may be temporarily unavailable. Try again later.")
+        case .invalidResponse:
+            return String(localized: "The store may have changed its product feed format.")
         }
+    }
+
+    var iconName: String {
+        switch self {
+        case .storeNotFound:
+            return "storefront.circle"
+        case .rateLimited:
+            return "clock"
+        case .networkUnavailable:
+            return "wifi.slash"
+        case .networkTimeout:
+            return "clock.badge.exclamationmark"
+        case .serverError:
+            return "exclamationmark.icloud"
+        case .invalidResponse:
+            return "exclamationmark.triangle"
+        }
+    }
+
+    /// Converts a generic Error to a SyncError.
+    static func from(_ error: Error) -> SyncError {
+        if let syncError = error as? SyncError {
+            return syncError
+        }
+
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .notConnectedToInternet, .networkConnectionLost:
+                return .networkUnavailable
+            case .timedOut:
+                return .networkTimeout
+            default:
+                return .invalidResponse
+            }
+        }
+
+        if let apiError = error as? ShopifyAPIError {
+            switch apiError {
+            case .invalidResponse:
+                return .invalidResponse
+            case .httpError(let statusCode):
+                if (500...599).contains(statusCode) {
+                    return .serverError(statusCode: statusCode)
+                }
+                return .invalidResponse
+            }
+        }
+
+        return .invalidResponse
     }
 }
 
@@ -259,11 +336,84 @@ actor StoreService: ModelActor {
                 }
             }
 
+            // Auto-delete old snapshots if enabled
+            if UserDefaults.standard.bool(forKey: "autoDeleteSnapshots") {
+                let days = UserDefaults.standard.integer(forKey: "snapshotRetentionDays")
+                if days > 0,
+                   let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: Date()) {
+                    _ = try? ActorTrace.contextOp("delete-old-snapshots", context: modelContext) {
+                        try deleteOldSnapshots(olderThan: cutoff)
+                    }
+                }
+            }
+
             let endThreadDesc = ThreadInfo.current.description
             Log.sync.info("syncAllStores END \(endThreadDesc)")
         } catch {
             Log.sync.error("Failed to fetch stores: \(error)")
         }
+    }
+
+    // MARK: - Test Data Seeding
+
+    /// Seeds mock data for UI testing. Only call when using in-memory store.
+    func seedTestData() {
+        let store = Store(name: "Test Store", domain: "test-store.myshopify.com")
+        modelContext.insert(store)
+
+        // Add some products with variants
+        for idx in 1...5 {
+            let product = Product(
+                shopifyId: Int64(idx),
+                handle: "test-product-\(idx)",
+                title: "Test Product \(idx)"
+            )
+            product.store = store
+            modelContext.insert(product)
+
+            let variant = Variant(
+                shopifyId: Int64(idx * 100),
+                title: "Default",
+                price: Decimal(19.99 + Double(idx)),
+                available: idx % 2 == 0,
+                position: idx
+            )
+            variant.product = product
+            modelContext.insert(variant)
+        }
+
+        // Add a change event so Activity has something to show
+        let event = ChangeEvent(
+            changeType: .priceDropped,
+            productTitle: "Test Product 1",
+            variantTitle: "Default",
+            oldValue: "$29.99",
+            newValue: "$19.99",
+            store: store
+        )
+        modelContext.insert(event)
+
+        try? modelContext.save()
+    }
+
+    // MARK: - Cleanup
+
+    /// Deletes snapshots older than the specified date
+    func deleteOldSnapshots(olderThan cutoff: Date) throws {
+        // Batch delete doesn't work due to mandatory relationship constraint
+        // Fetch and delete individually instead
+        let predicate = #Predicate<VariantSnapshot> { $0.capturedAt < cutoff }
+        let descriptor = FetchDescriptor(predicate: predicate)
+        let snapshots = try modelContext.fetch(descriptor)
+        for snapshot in snapshots {
+            modelContext.delete(snapshot)
+        }
+        try modelContext.save()
+    }
+
+    /// Returns the count of all snapshots. Used for testing.
+    func snapshotCount() throws -> Int {
+        try modelContext.fetchCount(FetchDescriptor<VariantSnapshot>())
     }
 
     // MARK: - Private Helpers

@@ -17,12 +17,13 @@ struct ActivityRowDTO: View {
             Circle()
                 .fill(event.isRead ? Color.clear : Color.accentColor)
                 .frame(width: 8, height: 8)
+                .accessibilityHidden(true)
 
             Image(systemName: event.changeType.icon)
                 .foregroundStyle(event.changeType.color)
                 .font(.title2)
                 .frame(width: 32)
-                .accessibilityLabel(accessibilityLabel)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(event.productTitle)
@@ -45,7 +46,7 @@ struct ActivityRowDTO: View {
                     .font(.caption)
                 } else if let description = changeDescription {
                     Text(description)
-                        .font(.caption)
+                        .font(.caption.weight(.medium))
                         .foregroundStyle(.secondary)
                 }
             }
@@ -62,6 +63,9 @@ struct ActivityRowDTO: View {
                 onAppear()
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(rowAccessibilityLabel)
+        .accessibilityValue(event.isRead ? "Read" : "Unread")
     }
 
     private var accessibilityLabel: String {
@@ -81,6 +85,30 @@ struct ActivityRowDTO: View {
         case .imagesChanged:
             "Images changed"
         }
+    }
+
+    private var rowAccessibilityLabel: String {
+        var parts: [String] = []
+
+        if !event.isRead {
+            parts.append("Unread")
+        }
+
+        parts.append(accessibilityLabel)
+        parts.append("on \(event.productTitle)")
+
+        if let variant = event.variantTitle {
+            parts.append(variant)
+        }
+
+        if let change = event.priceChange {
+            let amount = abs(change).formatted(.currency(code: "USD"))
+            parts.append(change > 0 ? "up \(amount)" : "down \(amount)")
+        }
+
+        parts.append(event.occurredAt.formatted(.relative(presentation: .named)))
+
+        return parts.joined(separator: ", ")
     }
 
     private var changeDescription: String? {

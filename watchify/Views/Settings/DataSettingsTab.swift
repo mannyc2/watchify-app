@@ -6,21 +6,42 @@
 import SwiftUI
 
 struct DataSettingsTab: View {
-    @AppStorage("autoDeleteEvents") private var autoDelete = false
-    @AppStorage("eventRetentionDays") private var retentionDays = 90
+    @AppStorage("autoDeleteEvents") private var autoDeleteEvents = false
+    @AppStorage("eventRetentionDays") private var eventRetentionDays = 90
+    @AppStorage("autoDeleteSnapshots") private var autoDeleteSnapshots = false
+    @AppStorage("snapshotRetentionDays") private var snapshotRetentionDays = 90
     @State private var showingClearConfirmation = false
 
     var body: some View {
         Form {
-            Section("Data Retention") {
-                Toggle("Auto-delete old events", isOn: $autoDelete)
-                if autoDelete {
+            Section("Event Retention") {
+                Toggle("Auto-delete old events", isOn: $autoDeleteEvents)
+                if autoDeleteEvents {
                     HStack {
                         Text("Keep events for")
-                        TextField("", value: $retentionDays, format: .number)
+                        TextField("", value: $eventRetentionDays, format: .number)
                             .frame(width: 60)
+                            .accessibilityLabel("Event retention days")
                         Text("days")
                     }
+                    .accessibilityElement(children: .combine)
+                }
+            }
+
+            Section("Price History Retention") {
+                Toggle("Auto-delete old price history", isOn: $autoDeleteSnapshots)
+                if autoDeleteSnapshots {
+                    HStack {
+                        Text("Keep snapshots for")
+                        TextField("", value: $snapshotRetentionDays, format: .number)
+                            .frame(width: 60)
+                            .accessibilityLabel("Snapshot retention days")
+                        Text("days")
+                    }
+                    .accessibilityElement(children: .combine)
+                    Text("Snapshots older than \(snapshotRetentionDays) days will be deleted during sync")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -28,6 +49,8 @@ struct DataSettingsTab: View {
                 Button("Clear All Events...", role: .destructive) {
                     showingClearConfirmation = true
                 }
+                .accessibilityLabel("Clear all events")
+                .accessibilityHint("This cannot be undone")
             }
         }
         .formStyle(.grouped)

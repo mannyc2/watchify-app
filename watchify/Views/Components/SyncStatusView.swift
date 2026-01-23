@@ -8,6 +8,7 @@ import SwiftUI
 
 struct SyncStatusView: View {
     let retryAfter: TimeInterval
+    let lastSyncedAt: Date?
     let onRetry: () -> Void
     let onDismiss: () -> Void
 
@@ -42,6 +43,12 @@ struct SyncStatusView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .contentTransition(.numericText())
+
+                if let lastSync = lastSyncedAt {
+                    Text("Last synced \(lastSync, format: .relative(presentation: .named))")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
             .animation(.default, value: isReady)
 
@@ -57,6 +64,7 @@ struct SyncStatusView: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss sync status")
         }
         .padding(12)
         .background(.ultraThinMaterial)
@@ -110,6 +118,7 @@ struct SyncStatusView: View {
 #Preview("Waiting State") {
     SyncStatusView(
         retryAfter: 30,
+        lastSyncedAt: Date().addingTimeInterval(-3600),
         onRetry: { print("Retry tapped") },
         onDismiss: { print("Dismiss tapped") }
     )
@@ -119,6 +128,7 @@ struct SyncStatusView: View {
 #Preview("Ready State") {
     SyncStatusView(
         retryAfter: 0,
+        lastSyncedAt: Date().addingTimeInterval(-7200),
         onRetry: { print("Retry tapped") },
         onDismiss: { print("Dismiss tapped") }
     )

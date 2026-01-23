@@ -1,6 +1,13 @@
 # Services
 
-Two services handle the core logic.
+Four services handle the core logic:
+
+| Service | Isolation | Purpose |
+|---------|-----------|---------|
+| `StoreService` | `ModelActor` | SwiftData persistence, sync |
+| `NotificationService` | `@MainActor` | Local notifications |
+| `NetworkMonitor` | `@MainActor` | Connectivity tracking |
+| `BackgroundSyncState` | `@MainActor` | Ephemeral sync error state |
 
 ## StoreService (ModelActor)
 
@@ -96,12 +103,33 @@ Task.detached (background)
 
 ### SyncError
 
+Comprehensive error type with user-friendly messages and SF Symbol icons.
+
 ```swift
 enum SyncError: Error, LocalizedError {
-    case storeNotFound
-    case rateLimited(retryAfter: TimeInterval)
+    case storeNotFound              // Store not in database
+    case rateLimited(retryAfter:)   // 60s cooldown between syncs
+    case networkUnavailable         // Device offline
+    case networkTimeout             // Request timed out
+    case serverError(statusCode:)   // HTTP 5xx errors
+    case invalidResponse            // Malformed data
+
+    var errorDescription: String?      // Short title ("No connection")
+    var failureReason: String?         // What happened
+    var recoverySuggestion: String?    // How to fix it
+    var iconName: String               // SF Symbol for UI
 }
 ```
+
+**Error Conversion**: `SyncError.from(_:)` converts `URLError` and `ShopifyAPIError` to appropriate cases:
+
+| Source Error | SyncError |
+|--------------|-----------|
+| `URLError.notConnectedToInternet` | `.networkUnavailable` |
+| `URLError.networkConnectionLost` | `.networkUnavailable` |
+| `URLError.timedOut` | `.networkTimeout` |
+| `ShopifyAPIError.httpError(5xx)` | `.serverError(statusCode:)` |
+| Other errors | `.invalidResponse` |
 
 ---
 
@@ -146,3 +174,94 @@ content.title = storeName              // e.g., "Allbirds"
 content.body = "3 price drops, 1 back in stock"
 content.threadIdentifier = storeId     // Groups in Notification Center
 ```
+
+---
+
+## NetworkMonitor (@MainActor)
+
+Singleton that tracks network connectivity using `NWPathMonitor`.
+
+```swift
+@MainActor @Observable
+final class NetworkMonitor {
+    static let shared = NetworkMonitor()
+
+    private(set) var isConnected: Bool        // true if network available
+    private(set) var connectionType: ConnectionType  // .wifi, .cellular, .wired, .unknown
+
+    func start()   // Begin monitoring (call in app .task)
+    func stop()    // Stop monitoring
+}
+```
+
+### Usage
+
+Started in `watchifyApp.swift`:
+
+```swift
+.task {
+    NetworkMonitor.shared.start()
+    // ...
+}
+```
+
+Views can observe connectivity:
+
+```swift
+private var isOffline: Bool {
+    !NetworkMonitor.shared.isConnected
+}
+```
+
+### Why @Observable?
+
+SwiftUI views need to reactively update when connectivity changes. Using `@Observable` on `@MainActor` allows views to directly observe `isConnected` without manual bindings or Combine.
+
+---
+
+## BackgroundSyncState (@MainActor)
+
+Singleton that tracks ephemeral sync errors from background sync operations. Not persisted—cleared on app restart or successful sync.
+
+```swift
+@MainActor @Observable
+final class BackgroundSyncState {
+    static let shared = BackgroundSyncState()
+
+    private(set) var storeErrors: [UUID: SyncError]  // Per-store errors
+
+    var hasErrors: Bool           // True if any store has error
+    var errorSummary: String?     // "1 store failed to sync" or "3 stores failed to sync"
+
+    func recordError(_ error: SyncError, forStore storeId: UUID)
+    func recordSuccess(forStore storeId: UUID)  // Clears error for store
+    func clearAllErrors()
+}
+```
+
+### Data Flow
+
+```
+Background sync loop (Task.detached)
+  └── syncAllStoresWithErrorTracking()
+      └── For each store:
+          ├── Success → BackgroundSyncState.shared.recordSuccess(forStore:)
+          └── Failure → BackgroundSyncState.shared.recordError(_:forStore:)
+
+Views observe BackgroundSyncState.shared.hasErrors
+  └── Show CompactErrorBannerView when true
+```
+
+### Why Separate from StoreService?
+
+| Concern | StoreService | BackgroundSyncState |
+|---------|--------------|---------------------|
+| **Isolation** | `ModelActor` (background) | `@MainActor` |
+| **Data** | Persistent (SwiftData) | Ephemeral (in-memory) |
+| **Observation** | Can't be observed by SwiftUI | `@Observable` for reactive UI |
+
+Views run on `@MainActor` and need `@Observable` state on the same actor. Keeping error state in a `@MainActor` singleton avoids actor-hopping complexity.
+
+### Rate Limit Handling
+
+Rate limit errors (`.rateLimited`) are **not** recorded in `BackgroundSyncState`—they're expected during normal operation (60s cooldown). Only unexpected failures are surfaced to users.

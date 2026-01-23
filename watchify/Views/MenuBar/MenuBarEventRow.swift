@@ -17,12 +17,14 @@ struct MenuBarEventRowDTO: View {
             Circle()
                 .fill(event.isRead ? Color.clear : Color.accentColor)
                 .frame(width: 6, height: 6)
+                .accessibilityHidden(true)
 
             // Change type icon
             Image(systemName: event.changeType.icon)
                 .foregroundStyle(event.changeType.color)
                 .font(.body)
                 .frame(width: 24)
+                .accessibilityHidden(true)
 
             // Content
             VStack(alignment: .leading, spacing: 1) {
@@ -58,6 +60,45 @@ struct MenuBarEventRowDTO: View {
             if !event.isRead {
                 onAppear()
             }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(rowAccessibilityLabel)
+        .accessibilityValue(event.isRead ? "Read" : "Unread")
+    }
+
+    private var rowAccessibilityLabel: String {
+        var parts: [String] = []
+
+        if !event.isRead {
+            parts.append("Unread")
+        }
+
+        parts.append(changeTypeLabel)
+        parts.append("on \(event.productTitle)")
+
+        if let variant = event.variantTitle {
+            parts.append(variant)
+        }
+
+        if let change = event.priceChange {
+            let amount = abs(change).formatted(.currency(code: "USD"))
+            parts.append(change > 0 ? "up \(amount)" : "down \(amount)")
+        }
+
+        parts.append(event.occurredAt.formatted(.relative(presentation: .named)))
+
+        return parts.joined(separator: ", ")
+    }
+
+    private var changeTypeLabel: String {
+        switch event.changeType {
+        case .priceDropped: "Price dropped"
+        case .priceIncreased: "Price increased"
+        case .backInStock: "Back in stock"
+        case .outOfStock: "Out of stock"
+        case .newProduct: "New product"
+        case .productRemoved: "Product removed"
+        case .imagesChanged: "Images changed"
         }
     }
 

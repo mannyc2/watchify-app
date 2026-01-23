@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import TipKit
 
 enum SidebarSelection: Hashable {
     case overview
@@ -24,6 +25,7 @@ struct SidebarView: View {
             Label("Activity", systemImage: "clock.arrow.circlepath")
                 .badge(viewModel.unreadCount)
                 .tag(SidebarSelection.activity)
+                .accessibilityLabel("Activity, \(viewModel.unreadCount) unread")
 
             Section("Stores") {
                 ForEach(viewModel.stores) { store in
@@ -40,9 +42,13 @@ struct SidebarView: View {
                     Label("Add Store", systemImage: "plus")
                 }
                 .buttonStyle(.glass)
+                .popoverTip(AddStoreTip())
+                .help("Add a Shopify store to monitor")
             }
         }
         .navigationTitle("Watchify")
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Sidebar navigation")
     }
 }
 

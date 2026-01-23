@@ -13,14 +13,21 @@ struct PriceChangeIndicator: View {
     private var color: Color { isIncrease ? ChangeType.priceIncreased.color : ChangeType.priceDropped.color }
     private var icon: String { isIncrease ? "arrow.up" : "arrow.down" }
 
+    private var accessibilityDescription: String {
+        let direction = isIncrease ? "increased" : "dropped"
+        return "Price \(direction) by \(abs(change).formatted(.currency(code: "USD")))"
+    }
+
     var body: some View {
         HStack(spacing: 2) {
             Image(systemName: icon)
                 .font(.caption2)
+                .accessibilityHidden(true)
             Text(abs(change), format: .currency(code: "USD"))
                 .font(.caption2)
         }
         .foregroundStyle(color)
+        .accessibilityLabel(accessibilityDescription)
     }
 }
 

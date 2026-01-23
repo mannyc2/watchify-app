@@ -99,6 +99,33 @@ struct PriceHistoryChart: View {
         }
         .chartXSelection(value: $selectedDate)
         .frame(height: 220)
+        .accessibilityLabel(chartAccessibilityLabel)
+    }
+
+    private var chartAccessibilityLabel: String {
+        let prices = chartData.map { $0.price }
+        guard let minPrice = prices.min(), let maxPrice = prices.max() else {
+            return "Price history chart with no data"
+        }
+
+        let minFormatted = minPrice.formatted(.currency(code: "USD"))
+        let maxFormatted = maxPrice.formatted(.currency(code: "USD"))
+        let pointCount = chartData.count
+
+        if let firstPrice = prices.first, let lastPrice = prices.last {
+            let trend: String
+            if lastPrice > firstPrice {
+                trend = "trending up"
+            } else if lastPrice < firstPrice {
+                trend = "trending down"
+            } else {
+                trend = "stable"
+            }
+            let base = "Price history chart with \(pointCount) data points"
+            return "\(base), ranging from \(minFormatted) to \(maxFormatted), \(trend)"
+        }
+
+        return "Price history chart with \(pointCount) data points, \(minFormatted) to \(maxFormatted)"
     }
 
     private func tooltipView(date: Date, price: Decimal) -> some View {

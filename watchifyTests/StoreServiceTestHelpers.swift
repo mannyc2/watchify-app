@@ -20,7 +20,9 @@ final class StoreServiceTestContext {
 
     init() async throws {
         let schema = Schema([Store.self, Product.self, Variant.self, VariantSnapshot.self, ChangeEvent.self])
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        // Use unique name for each test context to ensure complete isolation
+        let uniqueName = UUID().uuidString
+        let config = ModelConfiguration(uniqueName, isStoredInMemoryOnly: true)
         self.container = try ModelContainer(for: schema, configurations: config)
         self.context = container.mainContext  // Use mainContext to see actor's saved changes
         self.mockAPI = MockShopifyAPI()

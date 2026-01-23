@@ -61,6 +61,11 @@ struct ContentView: View {
         .sheet(isPresented: $showingAddStore) {
             AddStoreSheet(selection: $selection)
         }
+        .focusedSceneValue(\.sidebarSelection, $selection)
+        .focusedSceneValue(\.showAddStore, $showingAddStore)
+        .focusedSceneValue(\.storeList, viewModel.stores)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Watchify main window")
     }
 }
 

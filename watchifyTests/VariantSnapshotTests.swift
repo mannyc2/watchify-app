@@ -274,4 +274,78 @@ struct VariantSnapshotTests {
         let mostRecent = try #require(variant.mostRecentSnapshot)
         #expect(mostRecent.price == 90, "Most recent snapshot should be the $90 price point")
     }
+
+    // MARK: - Cleanup Tests
+
+    @Test("deleteOldSnapshots removes snapshots before cutoff date", .tags(.variantSnapshots))
+    @MainActor
+    func deleteOldSnapshotsRemovesBeforeCutoff() async throws {
+        let ctx = try await StoreServiceTestContext()
+
+        let initialProduct = ShopifyProduct.mock(
+            id: 9001,
+            title: "Cleanup Test Product",
+            variants: [makeVariant(id: 90010, title: "Default", price: 100)]
+        )
+        let store = try await ctx.addStore(products: [initialProduct])
+
+        // Create 3 snapshots by syncing price changes
+        for price in [Decimal(90), Decimal(80), Decimal(70)] {
+            let updatedProduct = ShopifyProduct.mock(
+                id: 9001,
+                title: "Cleanup Test Product",
+                variants: [makeVariant(id: 90010, title: "Default", price: price)]
+            )
+            await ctx.mockAPI.setProducts([updatedProduct])
+            ctx.clearRateLimit(for: store)
+            _ = try await ctx.service.syncStore(storeId: store.id)
+        }
+
+        // Verify snapshots were created
+        let countBefore = try await ctx.service.snapshotCount()
+        #expect(countBefore >= 3, "Should have at least 3 snapshots before cleanup")
+
+        // Delete with a cutoff in the future - should delete all snapshots
+        let futureCutoff = Calendar.current.date(byAdding: .day, value: 1, to: Date())!
+        try await ctx.service.deleteOldSnapshots(olderThan: futureCutoff)
+
+        let countAfter = try await ctx.service.snapshotCount()
+        #expect(countAfter == 0, "All snapshots should be deleted with future cutoff")
+    }
+
+    @Test("deleteOldSnapshots preserves recent snapshots", .tags(.variantSnapshots))
+    @MainActor
+    func deleteOldSnapshotsPreservesRecent() async throws {
+        let ctx = try await StoreServiceTestContext()
+
+        let initialProduct = ShopifyProduct.mock(
+            id: 9002,
+            title: "Preserve Test Product",
+            variants: [makeVariant(id: 90020, title: "Default", price: 100)]
+        )
+        let store = try await ctx.addStore(products: [initialProduct])
+
+        // Create 2 snapshots
+        for price in [Decimal(90), Decimal(80)] {
+            let updatedProduct = ShopifyProduct.mock(
+                id: 9002,
+                title: "Preserve Test Product",
+                variants: [makeVariant(id: 90020, title: "Default", price: price)]
+            )
+            await ctx.mockAPI.setProducts([updatedProduct])
+            ctx.clearRateLimit(for: store)
+            _ = try await ctx.service.syncStore(storeId: store.id)
+        }
+
+        // Verify snapshots exist
+        let countBefore = try await ctx.service.snapshotCount()
+        #expect(countBefore >= 2, "Should have at least 2 snapshots")
+
+        // Delete with a cutoff in the past - should preserve all recent snapshots
+        let pastCutoff = Calendar.current.date(byAdding: .day, value: -90, to: Date())!
+        try await ctx.service.deleteOldSnapshots(olderThan: pastCutoff)
+
+        let countAfter = try await ctx.service.snapshotCount()
+        #expect(countAfter == countBefore, "All recent snapshots should be preserved with past cutoff")
+    }
 }

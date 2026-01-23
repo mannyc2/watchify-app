@@ -87,6 +87,7 @@ struct ProductImageCarousel: View {
                 .onTapGesture {
                     onTapImage?(imageURLs[selectedIndex])
                 }
+                .accessibilityAddTraits(.isButton)
                 .focusable()
                 .onKeyPress(.leftArrow) {
                     withAnimation { navigateCarousel(.previous) }
@@ -150,6 +151,7 @@ struct ProductImageCarousel: View {
                     withAnimation { selectedIndex = index }
                 }
                 .accessibilityLabel("Image \(index + 1)")
+                .accessibilityAddTraits(.isButton)
                 .accessibilityAddTraits(selectedIndex == index ? .isSelected : [])
             }
         }
@@ -165,6 +167,8 @@ struct ImagePlaceholder: View {
                 Image(systemName: "photo")
                     .font(.largeTitle)
                     .foregroundStyle(.quaternary)
+                    .accessibilityHidden(true)
             }
+            .accessibilityLabel("No image available")
     }
 }

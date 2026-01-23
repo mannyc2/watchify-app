@@ -112,6 +112,7 @@ struct ProductDetailView: View {
         }
         .accessibilityLabel("Product image")
         .accessibilityHint("Tap to view full size")
+        .accessibilityAddTraits(.isButton)
     }
 
     // MARK: - Metadata
@@ -147,6 +148,7 @@ struct ProductDetailView: View {
 
                 if !product.variants.isEmpty {
                     Badge(text: "\(product.variants.count)", color: .blue)
+                        .accessibilityLabel("Number of variants: \(product.variants.count)")
                 }
             }
 

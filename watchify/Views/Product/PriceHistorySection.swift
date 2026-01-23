@@ -15,18 +15,14 @@ struct PriceHistorySection: View {
 
     // MARK: - Body
 
-    // Empty state is separate from the content VStack so it can be centered on the page
-    // rather than left-aligned with the content sections.
+    // Always show both sections with their own localized empty states.
+    // This keeps the page structure consistent whether or not there's data.
     var body: some View {
-        if variant.snapshots.isEmpty {
-            emptyState
-        } else {
-            VStack(alignment: .leading, spacing: 20) {
-                chartSection
-                listSection
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 20) {
+            chartSection
+            listSection
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Chart
@@ -39,12 +35,18 @@ struct PriceHistorySection: View {
             Text("Price Chart")
                 .font(.headline)
 
-            PriceHistoryChart(
-                snapshots: variant.priceHistory,
-                currentPrice: variant.price,
-                currentDate: Date()
-            )
-            .padding()
+            Group {
+                if variant.priceHistory.isEmpty {
+                    chartEmptyState
+                } else {
+                    PriceHistoryChart(
+                        snapshots: variant.priceHistory,
+                        currentPrice: variant.price,
+                        currentDate: Date()
+                    )
+                    .padding()
+                }
+            }
             .background(Color.primary.opacity(0.02))
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay(
@@ -52,6 +54,23 @@ struct PriceHistorySection: View {
                     .strokeBorder(.quaternary, lineWidth: 1)
             )
         }
+    }
+
+    private var chartEmptyState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "chart.line.downtrend.xyaxis")
+                .font(.largeTitle)
+                .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
+            Text("No chart data yet")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Text("Price changes will be charted after the next sync.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 200)
     }
 
     // MARK: - History List
@@ -64,17 +83,27 @@ struct PriceHistorySection: View {
                 Text("Price History")
                     .font(.headline)
 
-                Badge(text: "\(variant.snapshots.count)", color: .blue)
+                if !variant.snapshots.isEmpty {
+                    Badge(text: "\(variant.snapshots.count)", color: .blue)
+                        .accessibilityLabel("Total price records: \(variant.snapshots.count)")
+                }
             }
             .padding(.bottom, 12)
 
-            VStack(spacing: 1) {
-                ForEach(Array(sortedSnapshots.enumerated()), id: \.element.capturedAt) { index, snapshot in
-                    let previousPrice = index + 1 < sortedSnapshots.count ? sortedSnapshots[index + 1].price : nil
-                    PriceHistoryRow(snapshot: snapshot, previousPrice: previousPrice)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(index.isMultiple(of: 2) ? Color.clear : Color.primary.opacity(0.03))
+            Group {
+                if sortedSnapshots.isEmpty {
+                    listEmptyState
+                } else {
+                    VStack(spacing: 1) {
+                        ForEach(Array(sortedSnapshots.enumerated()), id: \.element.capturedAt) { index, snapshot in
+                            let previousPrice = index + 1 < sortedSnapshots.count
+                                ? sortedSnapshots[index + 1].price : nil
+                            PriceHistoryRow(snapshot: snapshot, previousPrice: previousPrice)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(index.isMultiple(of: 2) ? Color.clear : Color.primary.opacity(0.03))
+                        }
+                    }
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -85,17 +114,24 @@ struct PriceHistorySection: View {
         }
     }
 
-    // MARK: - Empty State
-
-    // Centered with generous height so it doesn't look cramped at the bottom of the page.
-    private var emptyState: some View {
-        ContentUnavailableView {
-            Label("No Price History", systemImage: "chart.line.downtrend.xyaxis")
-        } description: {
-            Text("Price changes will appear here after syncing.")
+    private var listEmptyState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "clock")
+                .font(.title2)
+                .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
+            Text("No price changes recorded")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Text("Snapshots appear here when prices change during syncs.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
         }
-        .frame(maxWidth: .infinity, minHeight: 250)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
+        .background(Color.primary.opacity(0.02))
     }
+
 }
 
 // MARK: - Previews

@@ -6,6 +6,7 @@
 import OSLog
 import SwiftData
 import SwiftUI
+import TipKit
 
 enum DateRange: String, CaseIterable {
     case today = "Today"
@@ -75,6 +76,18 @@ struct ActivityView: View {
 private struct ActivityContentView: View {
     @Bindable var viewModel: ActivityViewModel
 
+    private var isOffline: Bool {
+        !NetworkMonitor.shared.isConnected
+    }
+
+    private var hasBackgroundErrors: Bool {
+        BackgroundSyncState.shared.hasErrors
+    }
+
+    private var errorSummary: String? {
+        BackgroundSyncState.shared.errorSummary
+    }
+
     var body: some View {
         Group {
             if viewModel.events.isEmpty && !viewModel.hasMore {
@@ -86,6 +99,19 @@ private struct ActivityContentView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0, pinnedViews: []) {
+                        TipView(ActivityTip())
+                            .padding(.horizontal)
+                            .padding(.top, 8)
+
+                        if hasBackgroundErrors, let summary = errorSummary {
+                            CompactErrorBannerView(
+                                message: summary,
+                                onDismiss: { BackgroundSyncState.shared.clearAllErrors() }
+                            )
+                            .padding(.horizontal)
+                            .padding(.vertical, 8)
+                        }
+
                         ForEach(viewModel.listItems) { item in
                             ActivityListItemView(
                                 item: item,
@@ -106,8 +132,10 @@ private struct ActivityContentView: View {
             }
         }
         .navigationTitle("Activity")
-        .navigationSubtitle(viewModel.subtitleText)
+        .navigationSubtitle(isOffline ? "Offline" : viewModel.subtitleText)
         .toolbar { toolbarContent }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Activity feed")
     }
 
     // MARK: - Toolbar
@@ -119,6 +147,8 @@ private struct ActivityContentView: View {
                 Button("Mark All Read") {
                     viewModel.markAllRead()
                 }
+                .help("Mark all events as read")
+                .accessibilityLabel("Mark all events as read")
             }
         }
 
@@ -129,18 +159,24 @@ private struct ActivityContentView: View {
                     Text(store.name).tag(store.id as UUID?)
                 }
             }
+            .help("Filter by store")
+            .accessibilityLabel("Filter by store")
 
             Picker("Type", selection: $viewModel.selectedType) {
                 ForEach(TypeFilter.allCases, id: \.self) { filter in
                     Text(filter.rawValue).tag(filter)
                 }
             }
+            .help("Filter by change type")
+            .accessibilityLabel("Filter by change type")
 
             Picker("Date", selection: $viewModel.dateRange) {
                 ForEach(DateRange.allCases, id: \.self) { range in
                     Text(range.rawValue).tag(range)
                 }
             }
+            .help("Filter by date range")
+            .accessibilityLabel("Filter by date range")
 
             if viewModel.hasActiveFilters {
                 Button("Clear Filters") {
@@ -148,6 +184,7 @@ private struct ActivityContentView: View {
                     viewModel.selectedType = .all
                     viewModel.dateRange = .all
                 }
+                .help("Reset all filters")
             }
         }
     }
@@ -156,9 +193,9 @@ private struct ActivityContentView: View {
 
     private var emptyStateMessage: String {
         if viewModel.hasActiveFilters {
-            return "No events match your filters"
+            return "No events match your filters. Try adjusting your filters."
         } else {
-            return "Changes to products will appear here"
+            return "Price drops, restocks, and new products will appear here as stores sync."
         }
     }
 }

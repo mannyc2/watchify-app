@@ -14,30 +14,58 @@ struct OverviewView: View {
         GridItem(.adaptive(minimum: 280, maximum: 400), spacing: 16)
     ]
 
+    private var isOffline: Bool {
+        !NetworkMonitor.shared.isConnected
+    }
+
+    private var hasBackgroundErrors: Bool {
+        BackgroundSyncState.shared.hasErrors
+    }
+
+    private var errorSummary: String? {
+        BackgroundSyncState.shared.errorSummary
+    }
+
     var body: some View {
         Group {
             if viewModel.stores.isEmpty {
                 ContentUnavailableView {
                     Label("No Stores", systemImage: "storefront")
                 } description: {
-                    Text("Add a store to start monitoring products")
+                    Text("Add a Shopify store to start tracking prices and stock changes.")
+                        .foregroundStyle(.secondary)
                 } actions: {
                     Button("Add Store") { onAddStore() }
+                        .help("Add a Shopify store to monitor")
                 }
             } else {
                 ScrollView {
-                    LazyVGrid(columns: columns, spacing: 16) {
-                        ForEach(viewModel.stores) { store in
-                            StoreCard(store: store) {
-                                selection = .store(store.id)
+                    VStack(spacing: 16) {
+                        if hasBackgroundErrors, let summary = errorSummary {
+                            CompactErrorBannerView(
+                                message: summary,
+                                onDismiss: { BackgroundSyncState.shared.clearAllErrors() }
+                            )
+                            .padding(.horizontal, 20)
+                        }
+
+                        LazyVGrid(columns: columns, spacing: 16) {
+                            ForEach(viewModel.stores) { store in
+                                StoreCard(store: store) {
+                                    selection = .store(store.id)
+                                }
                             }
                         }
+                        .padding(.horizontal, 20)
                     }
-                    .padding(20)
+                    .padding(.vertical, 20)
                 }
             }
         }
         .navigationTitle("Overview")
+        .navigationSubtitle(isOffline ? "Offline" : "")
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Overview, \(viewModel.stores.count) stores")
     }
 }
 

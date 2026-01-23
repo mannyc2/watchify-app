@@ -34,6 +34,7 @@ struct GeneralSettingsTab: View {
                     Divider()
                     Text("Custom...").tag(-1)
                 }
+                .accessibilityHint("Select how often to check for changes")
 
                 if useCustom {
                     HStack {
@@ -42,10 +43,14 @@ struct GeneralSettingsTab: View {
                         TextField("", value: $syncInterval, format: .number)
                             .frame(width: 60)
                             .multilineTextAlignment(.trailing)
+                            .accessibilityLabel("Custom interval in minutes")
                         Stepper("", value: $syncInterval, in: 5...1440, step: 5)
                             .labelsHidden()
+                            .accessibilityLabel("Adjust interval")
+                            .accessibilityValue("\(syncInterval) minutes")
                         Text("minutes")
                     }
+                    .accessibilityElement(children: .combine)
                 }
             } footer: {
                 if useCustom {

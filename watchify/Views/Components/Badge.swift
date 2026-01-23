@@ -15,11 +15,13 @@ struct Badge: View {
             if let icon {
                 Image(systemName: icon)
                     .font(.caption2)
+                    .accessibilityHidden(true)
             }
             Text(text)
                 .font(.caption2.weight(.medium))
         }
         .foregroundStyle(color)
+        .accessibilityLabel(text)
         .padding(.horizontal, 6)
         .padding(.vertical, 3)
         .background(color.opacity(0.15), in: Capsule())

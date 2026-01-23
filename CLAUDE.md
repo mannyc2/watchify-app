@@ -18,8 +18,11 @@ open Watchify.xcodeproj
 # Build and run
 ~/bin/xcede buildrun
 
-# Test
-xcodebuild test -scheme watchify -destination 'platform=macOS'
+# Test (unit)
+xcodebuild test -scheme watchify -destination 'platform=macOS' -only-testing:watchifyTests
+
+# Test (UI + accessibility audit)
+xcodebuild test -scheme watchify -destination 'platform=macOS' -only-testing:watchifyUITests
 
 # Lint
 swiftlint
@@ -88,8 +91,10 @@ See [docs/liquid-glass.md](docs/liquid-glass.md) for full guidelines, best pract
 │  DTOs (Sendable, cross-actor boundary)      │
 │  - ProductDTO, StoreDTO, ChangeEventDTO     │
 ├──────────────────┬──────────────────────────┤
-│  StoreService    │  NotificationService     │
-│  (ModelActor)    │  (@MainActor)            │
+│  StoreService    │  @MainActor Singletons   │
+│  (ModelActor)    │  - NotificationService   │
+│                  │  - NetworkMonitor        │
+│                  │  - BackgroundSyncState   │
 ├──────────────────┴──────────────────────────┤
 │  SwiftData Models                           │
 └─────────────────────────────────────────────┘
@@ -113,6 +118,9 @@ Background sync runs via `Task.detached` in `watchifyApp.swift` to avoid blockin
 | `Services/StoreService.swift` | ModelActor for all SwiftData operations |
 | `Services/StoreService+Sync.swift` | Product sync and change detection |
 | `Services/StoreService+Events.swift` | Event queries and management |
+| `Services/NetworkMonitor.swift` | NWPathMonitor connectivity tracking |
+| `Services/BackgroundSyncState.swift` | Ephemeral sync error state for UI |
+| `Services/NotificationService.swift` | Local notification delivery |
 | `ViewModels/` | @MainActor ViewModels for complex views |
 | `DTOs/` | Sendable types for cross-actor data transfer |
 | `Models/` | SwiftData schema |

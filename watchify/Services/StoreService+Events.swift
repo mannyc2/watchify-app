@@ -67,6 +67,19 @@ extension StoreService {
         }
     }
 
+    /// Fetches all store IDs. Returns Sendable UUIDs for cross-actor use.
+    func fetchAllStoreIds() -> [UUID] {
+        let descriptor = FetchDescriptor<Store>()
+
+        do {
+            let stores = try modelContext.fetch(descriptor)
+            return stores.map(\.id)
+        } catch {
+            Log.db.error("fetchAllStoreIds error: \(error)")
+            return []
+        }
+    }
+
     /// Fetches all stores for list display, sorted by addedAt descending.
     func fetchStoresForList() -> [StoreDTO] {
         let methodStart = entering("fetchStoresForList")

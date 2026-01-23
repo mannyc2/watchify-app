@@ -8,6 +8,7 @@
 import OSLog
 import SwiftData
 import SwiftUI
+import TipKit
 
 // MARK: - Unread Count Observer
 
@@ -67,6 +68,44 @@ final class UnreadCountObserver {
     }
 }
 
+// MARK: - Background Sync Helper
+
+/// Syncs all stores and tracks errors in BackgroundSyncState.
+/// Called from background Task.detached, so must hop to MainActor for state updates.
+/// Explicitly nonisolated to be callable from any context.
+nonisolated func syncAllStoresWithErrorTracking() async {
+    // Fetch store IDs (UUIDs are Sendable, Store objects are not)
+    let storeIds = await StoreService.shared.fetchAllStoreIds()
+
+    for storeId in storeIds {
+        do {
+            _ = try await StoreService.shared.syncStore(storeId: storeId)
+
+            // Record success on main actor
+            await MainActor.run {
+                BackgroundSyncState.shared.recordSuccess(forStore: storeId)
+            }
+        } catch let error as SyncError {
+            // Skip rate limit errors silently - they're expected during rapid syncs
+            if case .rateLimited = error {
+                continue
+            }
+
+            // Record error on main actor
+            await MainActor.run {
+                BackgroundSyncState.shared.recordError(error, forStore: storeId)
+            }
+            Log.sync.error("Background sync failed for store \(storeId): \(error)")
+        } catch {
+            let syncError = SyncError.from(error)
+            await MainActor.run {
+                BackgroundSyncState.shared.recordError(syncError, forStore: storeId)
+            }
+            Log.sync.error("Background sync failed for store \(storeId): \(error)")
+        }
+    }
+}
+
 // MARK: - App
 
 @main
@@ -75,14 +114,32 @@ struct WatchifyApp: App {
     @State private var unreadObserver = UnreadCountObserver()
     @State private var isReady = false
 
+    /// Whether running in UI test mode (in-memory database)
+    static let isUITesting = CommandLine.arguments.contains("-UITesting")
+    /// Whether to seed mock data for UI tests
+    static let seedTestData = CommandLine.arguments.contains("-SeedTestData")
+
     init() {
         do {
-            container = try ModelContainer(for: Store.self, Product.self,
-                Variant.self, VariantSnapshot.self, ChangeEvent.self)
+            // Use in-memory store for UI testing to isolate from real data
+            if Self.isUITesting {
+                let config = ModelConfiguration(isStoredInMemoryOnly: true)
+                container = try ModelContainer(
+                    for: Store.self, Product.self, Variant.self, VariantSnapshot.self, ChangeEvent.self,
+                    configurations: config
+                )
+            } else {
+                container = try ModelContainer(for: Store.self, Product.self,
+                    Variant.self, VariantSnapshot.self, ChangeEvent.self)
+            }
         } catch {
             fatalError("Failed to create ModelContainer: \(error)")
         }
 
+        // Configure TipKit for contextual tips
+        try? Tips.configure([
+            .displayFrequency(.daily)
+        ])
     }
 
     var body: some Scene {
@@ -96,11 +153,25 @@ struct WatchifyApp: App {
                 }
             }
             .task {
+                // Start network monitoring
+                NetworkMonitor.shared.start()
+
                 // Initialize StoreService before showing ContentView
                 if StoreService.shared == nil {
                     StoreService.shared = await StoreService.makeBackground(container: container)
                 }
+
+                // Seed mock data for UI tests if requested
+                if Self.seedTestData {
+                    await Task.detached {
+                        await StoreService.shared.seedTestData()
+                    }.value
+                }
+
                 isReady = true
+
+                // Skip background sync loop during UI testing
+                guard !Self.isUITesting else { return }
 
                 // Start background sync loop
                 Task.detached(priority: .utility) {
@@ -110,7 +181,7 @@ struct WatchifyApp: App {
 
                     while !Task.isCancelled {
                         Log.sync.info("SyncLoop BEFORE_SYNC \(ThreadInfo.current)")
-                        await StoreService.shared.syncAllStores()
+                        await syncAllStoresWithErrorTracking()
                         Log.sync.info("SyncLoop AFTER_SYNC \(ThreadInfo.current)")
                         try? await Task.sleep(for: .seconds(interval))
                     }
@@ -119,6 +190,9 @@ struct WatchifyApp: App {
             .onAppear {
                 unreadObserver.configure()
             }
+        }
+        .commands {
+            AppCommands()
         }
 
         #if os(macOS)
