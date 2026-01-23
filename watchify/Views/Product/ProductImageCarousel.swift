@@ -57,20 +57,13 @@ struct ProductImageCarousel: View {
                 .aspectRatio(layout.aspectRatio, contentMode: .fit)
                 .frame(maxWidth: .infinity)
                 .overlay {
-                    AsyncImage(url: imageURLs[selectedIndex]) { phase in
-                        switch phase {
-                        case .empty:
-                            ProgressView()
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFit()
-                                .transition(.opacity)
-                        case .failure:
-                            ImagePlaceholder()
-                        @unknown default:
-                            ImagePlaceholder()
-                        }
+                    CachedAsyncImage(url: imageURLs[selectedIndex], displaySize: .fullSize) { image in
+                        image
+                            .resizable()
+                            .scaledToFit()
+                            .transition(.opacity)
+                    } placeholder: {
+                        ProgressView()
                     }
                     .id(selectedIndex)
                 }
@@ -131,15 +124,16 @@ struct ProductImageCarousel: View {
     private func thumbnailStrip(size: CGFloat) -> some View {
         HStack(spacing: 8) {
             ForEach(Array(imageURLs.enumerated()), id: \.offset) { index, url in
-                AsyncImage(url: url) { phase in
-                    if let image = phase.image {
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    } else {
-                        Rectangle()
-                            .fill(.fill.tertiary)
-                    }
+                CachedAsyncImage(
+                    url: url,
+                    displaySize: layout == .compact ? .thumbnailCompact : .thumbnailExpanded
+                ) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    Rectangle()
+                        .fill(.fill.tertiary)
                 }
                 .frame(width: size, height: size)
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))

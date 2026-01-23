@@ -19,8 +19,8 @@ struct ProductCardDTO: View {
 
         NavigationLink(value: product.shopifyId) {
             VStack(alignment: .leading, spacing: 8) {
-                // Product image (square, AsyncImage)
-                AsyncImage(url: product.imageURL) { image in
+                // Product image (square, cached and downsampled)
+                CachedAsyncImage(url: product.imageURL, displaySize: .productCard) { image in
                     image
                         .resizable()
                         .scaledToFill()

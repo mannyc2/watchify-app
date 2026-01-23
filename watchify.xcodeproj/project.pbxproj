@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		FE432BBB2F23CA48000729B3 /* Nuke in Frameworks */ = {isa = PBXBuildFile; productRef = FE432BBA2F23CA48000729B3 /* Nuke */; };
+		FE432BBD2F23CA48000729B3 /* NukeUI in Frameworks */ = {isa = PBXBuildFile; productRef = FE432BBC2F23CA48000729B3 /* NukeUI */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		FE432BB02F22FCD5000729B3 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -59,6 +64,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FE432BBB2F23CA48000729B3 /* Nuke in Frameworks */,
+				FE432BBD2F23CA48000729B3 /* NukeUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -135,6 +142,8 @@
 			);
 			name = watchify;
 			packageProductDependencies = (
+				FE432BBA2F23CA48000729B3 /* Nuke */,
+				FE432BBC2F23CA48000729B3 /* NukeUI */,
 			);
 			productName = watchify;
 			productReference = FEFBC9B42F1F0481008DF908 /* watchify.app */;
@@ -195,6 +204,9 @@
 			);
 			mainGroup = FEFBC9AB2F1F0481008DF908;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				FE432BB92F23CA48000729B3 /* XCRemoteSwiftPackageReference "Nuke" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = FEFBC9B52F1F0481008DF908 /* Products */;
 			projectDirPath = "";
@@ -633,6 +645,30 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		FE432BB92F23CA48000729B3 /* XCRemoteSwiftPackageReference "Nuke" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/kean/Nuke";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.8.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		FE432BBA2F23CA48000729B3 /* Nuke */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FE432BB92F23CA48000729B3 /* XCRemoteSwiftPackageReference "Nuke" */;
+			productName = Nuke;
+		};
+		FE432BBC2F23CA48000729B3 /* NukeUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FE432BB92F23CA48000729B3 /* XCRemoteSwiftPackageReference "Nuke" */;
+			productName = NukeUI;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = FEFBC9AC2F1F0481008DF908 /* Project object */;
 }

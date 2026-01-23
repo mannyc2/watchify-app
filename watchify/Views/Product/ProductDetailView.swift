@@ -31,6 +31,11 @@ struct ProductDetailView: View {
         product.allImageURLs
     }
 
+    /// Image URLs resolved to local cache when available (for QuickLook)
+    private var cachedImageURLs: [URL] {
+        imageURLs.map { ImageService.cachedFileURL(for: $0) }
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -60,7 +65,7 @@ struct ProductDetailView: View {
                 }
             }
         }
-        .quickLookPreview($quickLookURL, in: imageURLs)
+        .quickLookPreview($quickLookURL, in: cachedImageURLs)
     }
 
     // MARK: - Image Section
@@ -80,35 +85,28 @@ struct ProductDetailView: View {
                 imageURLs: imageURLs,
                 layout: layout,
                 selectedIndex: $selectedImageIndex,
-                onTapImage: { quickLookURL = $0 }
+                onTapImage: { quickLookURL = ImageService.cachedFileURL(for: $0) }
             )
         }
     }
 
     private func singleImageView(url: URL, aspectRatio: CGFloat) -> some View {
-        AsyncImage(url: url) { phase in
-            switch phase {
-            case .empty:
-                Rectangle()
-                    .fill(.fill.tertiary)
-                    .overlay { ProgressView() }
-            case .success(let image):
-                image
-                    .resizable()
-                    .scaledToFit()
-                    .transition(.opacity)
-            case .failure:
-                ImagePlaceholder()
-            @unknown default:
-                ImagePlaceholder()
-            }
+        CachedAsyncImage(url: url, displaySize: .fullSize) { image in
+            image
+                .resizable()
+                .scaledToFit()
+                .transition(.opacity)
+        } placeholder: {
+            Rectangle()
+                .fill(.fill.tertiary)
+                .overlay { ProgressView() }
         }
         .frame(maxWidth: .infinity)
         .aspectRatio(aspectRatio, contentMode: .fit)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .onTapGesture {
-            quickLookURL = url
+            quickLookURL = ImageService.cachedFileURL(for: url)
         }
         .accessibilityLabel("Product image")
         .accessibilityHint("Tap to view full size")

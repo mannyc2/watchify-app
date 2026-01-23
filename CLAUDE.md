@@ -40,6 +40,7 @@ Config is in `.xcrc` (scheme, platform, device). Currently set to `platform=mac`
 - **SwiftUI** + Liquid Glass design
 - **SwiftData** for persistence
 - **Swift Charts** for price history
+- **TipKit** for onboarding tips
 - **Actors** for thread-safe networking
 
 ## UI Guidelines
@@ -63,6 +64,12 @@ Config is in `.xcrc` (scheme, platform, device). Currently set to `platform=mac`
   }
   ```
   Common states to cover: empty, populated, loading, error, edge cases (e.g., long text, missing data)
+
+- **Toolbar Buttons**: Always add `.help()` tooltips
+
+- **Accessibility**: Full VoiceOver support required. Use `.accessibilityElement(children: .combine)` on rows with a complete `.accessibilityLabel()`. Hide decorative icons with `.accessibilityHidden(true)`. Add `.accessibilityHint()` to form fields. Charts need text summaries (trend, range). UI tests run `performAccessibilityAudit()`.
+
+- **Keyboard Shortcuts** (`AppCommands.swift`): ⌘N (Add Store), ⌘R (Sync All), ⇧⌘R (Sync Current), ⌘1-9 (Navigate)
 
 ## Code Style
 
@@ -124,6 +131,9 @@ Background sync runs via `Task.detached` in `watchifyApp.swift` to avoid blockin
 | `ViewModels/` | @MainActor ViewModels for complex views |
 | `DTOs/` | Sendable types for cross-actor data transfer |
 | `Models/` | SwiftData schema |
+| `AppCommands.swift` | Menu bar commands and keyboard shortcuts |
+| `Tips/AppTips.swift` | TipKit onboarding tips |
+| `Views/Components/ErrorBannerView.swift` | Sync error display with retry/dismiss |
 
 ## Docs
 

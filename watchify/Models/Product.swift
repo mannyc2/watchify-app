@@ -24,7 +24,6 @@ final class Product {
     var vendor: String?
     var productType: String?
     var firstSeenAt: Date
-    var lastSeenAt: Date
     var isRemoved: Bool
 
     var store: Store?
@@ -56,7 +55,6 @@ final class Product {
         vendor: String? = nil,
         productType: String? = nil,
         firstSeenAt: Date = Date(),
-        lastSeenAt: Date = Date(),
         isRemoved: Bool = false
     ) {
         self.shopifyId = shopifyId
@@ -65,7 +63,6 @@ final class Product {
         self.vendor = vendor
         self.productType = productType
         self.firstSeenAt = firstSeenAt
-        self.lastSeenAt = lastSeenAt
         self.isRemoved = isRemoved
         self.titleSearchKey = Self.makeSearchKey(title)
     }

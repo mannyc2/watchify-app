@@ -186,7 +186,7 @@ struct ContentView: View {
 
 ### ProductCard
 
-Glass card with hover interaction.
+Glass card with hover interaction. Uses `CachedAsyncImage` for efficient image loading.
 
 ```swift
 struct ProductCard: View {
@@ -195,7 +195,7 @@ struct ProductCard: View {
 
     var body: some View {
         VStack(alignment: .leading) {
-            AsyncImage(url: product.imageURL) { ... }
+            CachedAsyncImage(url: product.imageURL, size: .productCard) { ... }
             Text(product.title)
             HStack {
                 Text(product.currentPrice, format: .currency(code: "USD"))
@@ -380,7 +380,7 @@ struct SettingsView: View {
 |-----|----------|
 | General | Sync interval (preset picker + custom with TextField/Stepper) |
 | Notifications | Master toggle + per-change-type toggles (7 types) + price thresholds |
-| Data | Auto-delete old events (configurable days) + "Clear All Events" |
+| Data | Event/snapshot retention + image cache (size limit, clear, reveal in Finder) |
 
 **Notifications Tab Details**:
 - Master toggle to enable/disable all notifications
@@ -403,6 +403,7 @@ struct SettingsView: View {
 | `Badge` | Reusable capsule badge with optional icon (stock status, event counts, etc.) |
 | `ActivityRow` | Activity feed row with unread indicator (blue dot), marks read on appear |
 | `GlassCard` | Reusable glass wrapper |
+| `CachedAsyncImage` | Nuke-backed async image with display size presets and disk caching |
 
 ### ActivityRow
 
@@ -510,6 +511,7 @@ Views/
 │
 ├── Components/                  # Reusable UI primitives
 │   ├── Badge.swift
+│   ├── CachedAsyncImage.swift
 │   ├── GlassTheme.swift
 │   ├── PriceChangeIndicator.swift
 │   └── SyncStatusView.swift

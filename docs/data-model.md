@@ -68,7 +68,6 @@ final class Product {
     var vendor: String?
     var productType: String?
     var firstSeenAt: Date
-    var lastSeenAt: Date
     var isRemoved: Bool
     var imageURLs: [String] = []  // Ordered array of CDN URLs
 

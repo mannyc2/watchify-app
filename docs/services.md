@@ -1,6 +1,6 @@
 # Services
 
-Four services handle the core logic:
+Five services handle the core logic:
 
 | Service | Isolation | Purpose |
 |---------|-----------|---------|
@@ -8,6 +8,7 @@ Four services handle the core logic:
 | `NotificationService` | `@MainActor` | Local notifications |
 | `NetworkMonitor` | `@MainActor` | Connectivity tracking |
 | `BackgroundSyncState` | `@MainActor` | Ephemeral sync error state |
+| `ImageService` | Static enum | Image loading with Nuke, disk cache |
 
 ## StoreService (ModelActor)
 
@@ -265,3 +266,81 @@ Views run on `@MainActor` and need `@Observable` state on the same actor. Keepin
 ### Rate Limit Handling
 
 Rate limit errors (`.rateLimited`) are **not** recorded in `BackgroundSyncState`—they're expected during normal operation (60s cooldown). Only unexpected failures are surfaced to users.
+
+---
+
+## ImageService (Static Enum)
+
+Namespace for Nuke image pipeline and persistent disk cache.
+
+```swift
+enum ImageService {
+    static let defaultCacheSizeMB = 500
+    static let cacheSizeKey = "imageCacheSizeLimitMB"
+
+    static let dataCache: DataCache?   // Persistent disk cache
+    static let pipeline: ImagePipeline // Configured Nuke pipeline
+
+    // Display size presets for image resizing
+    enum DisplaySize {
+        case productCard        // 120pt
+        case thumbnailCompact   // 64pt
+        case thumbnailExpanded  // 80pt
+        case storePreview       // 100pt
+        case fullSize           // No resize
+    }
+
+    // Image processing
+    static func processors(for size: DisplaySize, scale: CGFloat) -> [ImageProcessing]
+    static func cachedFileURL(for remoteURL: URL) -> URL
+
+    // Cache management
+    static var cacheSize: Int          // Current size in bytes
+    static var cacheCount: Int         // Number of cached items
+    static var cacheSizeLimit: Int     // Limit in bytes (get/set)
+    static var cacheSizeLimitMB: Int   // Limit in MB (persisted to UserDefaults)
+    static var cacheURL: URL?          // Cache directory path
+    static func clearCache()           // Remove all cached images
+}
+```
+
+### Cache Configuration
+
+The cache reads its size limit from `UserDefaults` on initialization:
+
+```swift
+static let dataCache: DataCache? = {
+    let cache = try? DataCache(name: "com.watchify.images")
+    let persistedMB = UserDefaults.standard.integer(forKey: cacheSizeKey)
+    let sizeMB = persistedMB > 0 ? persistedMB : defaultCacheSizeMB
+    cache?.sizeLimit = sizeMB * 1024 * 1024
+    return cache
+}()
+```
+
+### Settings Integration
+
+Users can configure the cache in Settings > Data:
+
+| Setting | Property |
+|---------|----------|
+| View cache size | `cacheSize`, `cacheCount` |
+| Change size limit | `cacheSizeLimitMB` (100/250/500/1000 MB) |
+| Clear cache | `clearCache()` |
+| Reveal in Finder | `cacheURL` |
+
+### Usage with CachedAsyncImage
+
+```swift
+CachedAsyncImage(url: imageURL, size: .productCard) { image in
+    image.resizable().aspectRatio(contentMode: .fill)
+} placeholder: {
+    ProgressView()
+}
+```
+
+### Why Static Enum?
+
+- **No instances needed**: Pure namespace for static configuration
+- **Lazy initialization**: `dataCache` and `pipeline` are initialized on first access
+- **Thread-safe**: Nuke handles thread safety internally

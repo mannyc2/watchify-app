@@ -210,9 +210,9 @@ actor StoreService: ModelActor {
         let store = Store(name: finalName, domain: domain)
         modelContext.insert(store)
 
-        _ = saveProducts(products, to: store, isInitialImport: true)
+        let result = await saveProducts(products, to: store, isInitialImport: true)
         store.lastFetchedAt = Date()
-        store.updateListingCache(products: store.products)
+        store.updateListingCache(products: result.activeProducts)
 
         logContextState("addStore before save")
         try ActorTrace.contextOp("addStore-save", context: modelContext) {
@@ -277,13 +277,14 @@ actor StoreService: ModelActor {
         Log.sync.info("syncStore API_END \(ThreadInfo.current) dt=\(apiFetchTime)s count=\(shopifyProducts.count)")
 
         let saveProductsStart = CFAbsoluteTimeGetCurrent()
-        let changes = saveProducts(shopifyProducts, to: store, isInitialImport: false)
+        let result = await saveProducts(shopifyProducts, to: store, isInitialImport: false)
         let saveTime = CFAbsoluteTimeGetCurrent() - saveProductsStart
-        Log.sync.info("syncStore saveProducts dt=\(saveTime)s changes=\(changes.count)")
+        let changeCount = result.changes.count, productCount = result.activeProducts.count
+        Log.sync.info("syncStore saveProducts dt=\(saveTime)s changes=\(changeCount) activeProducts=\(productCount)")
 
         let cacheStart = CFAbsoluteTimeGetCurrent()
         store.lastFetchedAt = Date()
-        store.updateListingCache(products: store.products)
+        store.updateListingCache(products: result.activeProducts)
         Log.sync.info("syncStore updateCache dt=\(CFAbsoluteTimeGetCurrent() - cacheStart)s")
 
         let finalSaveStart = CFAbsoluteTimeGetCurrent()
@@ -297,7 +298,7 @@ actor StoreService: ModelActor {
         Log.sync.info("syncStore SAVE[final] END \(ThreadInfo.current) dt=\(finalSaveTime)s")
 
         Log.sync.info("syncStore END totalSync=\(CFAbsoluteTimeGetCurrent() - syncStart)s")
-        return changes.map { ChangeEventDTO(from: $0) }
+        return result.changes.map { ChangeEventDTO(from: $0) }
     }
 
     /// Syncs all stores. Used by the background sync loop.

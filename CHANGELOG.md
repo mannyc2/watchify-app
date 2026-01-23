@@ -2,6 +2,36 @@
 
 All notable changes to Watchify. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## 2026-01-23
+
+### Added
+- Nuke image loading library for background decode and caching
+- `ImageService` with `DataCache` (500MB persistent disk cache)
+- `CachedAsyncImage` SwiftUI wrapper with display size presets
+- Display sizes: `.productCard` (120pt), `.thumbnailCompact` (64pt), `.thumbnailExpanded` (80pt), `.storePreview` (100pt), `.fullSize`
+- Image cache settings in Settings > Data: size display, limit picker (100MB/250MB/500MB/1GB), clear cache, reveal in Finder
+
+### Fixed
+- `SaveProductsResult` optimization: return active products from `saveProducts()` to avoid re-faulting `store.products` relationship in `updateListingCache()` (0.6ms, zero faults)
+- Resurrect bug: products removed in prior sync that reappear from Shopify now revive instead of causing duplicate inserts
+- Image decode hangs: replaced `AsyncImage` with `CachedAsyncImage` (Nuke) to eliminate 326ms main thread blocks
+
+### Changed
+- `saveProducts()` is now `async` and yields every 50 products to release actor lock
+- `saveProducts()` returns `SaveProductsResult` struct with `changes` and `activeProducts`
+- `addStore()` and `syncStore()` use `result.activeProducts` instead of `store.products`
+- Added fetch for removed products that match incoming shopifyIds during sync
+- `ProductCard`, `ProductImageCarousel`, `StoreCard`, `ProductDetailView` now use `CachedAsyncImage`
+
+### Performance
+- `updateListingCache`: eliminated ~600 product faults per sync
+- `Task.yield()` in processing loop: max continuous actor lock reduced from 274ms to ~20ms
+- Image loading: main thread hangs reduced from 326ms to 0ms (Nuke background decode)
+- Max SwiftUI update time reduced from 326ms to 13.5ms
+- No `_SwiftUIProxyImage` stalls in post-Nuke traces
+
+---
+
 ## 2026-01-22
 
 ### Added
@@ -112,3 +142,4 @@ All notable changes to Watchify. Format based on [Keep a Changelog](https://keep
 | 2026-01-20 | UI polish, product detail, settings, menu bar, notifications |
 | 2026-01-21 | Liquid Glass design system |
 | 2026-01-22 | Concurrency fixes, ViewModels, snapshot cleanup, error handling, accessibility |
+| 2026-01-23 | Sync performance, Nuke image loading (326ms hangs → 0ms) |

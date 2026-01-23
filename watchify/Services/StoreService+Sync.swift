@@ -7,6 +7,17 @@ import Foundation
 import OSLog
 import SwiftData
 
+// MARK: - SaveProductsResult
+
+/// Result of saveProducts() - returns changes and active products to avoid
+/// re-faulting store.products relationship after sync.
+struct SaveProductsResult {
+    var changes: [ChangeEvent]
+    /// Products that are currently active (fetched from Shopify, not removed).
+    /// Use this for updateListingCache() instead of store.products.
+    var activeProducts: [Product]
+}
+
 // MARK: - Sync Implementation
 
 extension StoreService {
@@ -15,21 +26,30 @@ extension StoreService {
         _ shopifyProducts: [ShopifyProduct],
         to store: Store,
         isInitialImport: Bool = false
-    ) -> [ChangeEvent] {
+    ) async -> SaveProductsResult {
         let methodStart = entering("saveProducts")
         defer { exiting("saveProducts", start: methodStart) }
 
         Log.sync.info("saveProducts START \(ThreadInfo.current) count=\(shopifyProducts.count)")
         defer { Log.sync.info("saveProducts END \(ThreadInfo.current)") }
 
-        guard !isInitialImport else {
+        let fetchedIdSet = Set(shopifyProducts.map(\.id))
+        let storeId = store.id
+
+        // Initial import: create + return the created products so callers never touch store.products.
+        if isInitialImport {
+            var newProducts: [Product] = []
+            newProducts.reserveCapacity(shopifyProducts.count)
+
             for shopifyProduct in shopifyProducts {
                 let product = createProduct(from: shopifyProduct)
                 product.store = store
                 modelContext.insert(product)
+                newProducts.append(product)
             }
+
             logContextState("saveProducts initialImport after insert")
-            return []
+            return SaveProductsResult(changes: [], activeProducts: newProducts)
         }
 
         // PERF: Use FetchDescriptor with prefetching instead of store.products relationship.
@@ -40,35 +60,85 @@ extension StoreService {
         // NOTE: Prefetching loads the relationship but doesn't fully resolve faulting.
         // trace4.trace shows Variant.shopifyId.getter still takes 326ms due to property
         // access triggering Core Data faults. See detectChanges() comment for details.
-        let storeId = store.id
-        var descriptor = FetchDescriptor<Product>(
+        var activeDescriptor = FetchDescriptor<Product>(
             predicate: #Predicate<Product> { $0.store?.id == storeId && !$0.isRemoved }
         )
-        descriptor.relationshipKeyPathsForPrefetching = [\.variants]
+        activeDescriptor.relationshipKeyPathsForPrefetching = [\.variants]
 
-        Log.sync.info("saveProducts fetch_products START \(ThreadInfo.current)")
-        let existingProducts = (try? ActorTrace.contextOp("saveProducts-fetch-existing", context: modelContext) {
-            try modelContext.fetch(descriptor)
+        Log.sync.info("saveProducts fetch_existing_active START \(ThreadInfo.current)")
+        let existingActive = (try? ActorTrace.contextOp("saveProducts-fetch-existing-active", context: modelContext) {
+            try modelContext.fetch(activeDescriptor)
         }) ?? []
-        Log.sync.info("saveProducts fetch_products END \(ThreadInfo.current) count=\(existingProducts.count)")
+        Log.sync.info("saveProducts fetch_existing_active END \(ThreadInfo.current) count=\(existingActive.count)")
 
-        let existingByShopifyId = Dictionary(uniqueKeysWithValues: existingProducts.map { ($0.shopifyId, $0) })
-        let fetchedIds = Set(shopifyProducts.map { $0.id })
-
-        // Process products without setting store relationship yet.
-        Log.sync.info("saveProducts process_fetched START \(ThreadInfo.current)")
-        var changes = processFetchedProducts(
-            shopifyProducts,
-            existingByShopifyId: existingByShopifyId,
-            store: store
+        // BUG FIX: Also fetch removed products that re-appear in Shopify feed.
+        // Without this, a product removed in a prior sync that reappears would cause
+        // a duplicate Product insert (existingByShopifyId wouldn't contain it).
+        var resurrectDescriptor = FetchDescriptor<Product>(
+            predicate: #Predicate<Product> {
+                $0.store?.id == storeId &&
+                $0.isRemoved &&
+                fetchedIdSet.contains($0.shopifyId)
+            }
         )
+        resurrectDescriptor.relationshipKeyPathsForPrefetching = [\.variants]
+
+        Log.sync.info("saveProducts fetch_resurrect_candidates START \(ThreadInfo.current)")
+        let resurrectCandidates = (try? ActorTrace.contextOp("saveProducts-fetch-resurrect", context: modelContext) {
+            try modelContext.fetch(resurrectDescriptor)
+        }) ?? []
+        Log.sync.info(
+            "saveProducts fetch_resurrect_candidates END \(ThreadInfo.current) count=\(resurrectCandidates.count)"
+        )
+
+        let allExisting = existingActive + resurrectCandidates
+        let existingByShopifyId: [Int64: Product] =
+            Dictionary(uniqueKeysWithValues: allExisting.map { ($0.shopifyId, $0) })
+
+        // PERF: Build activeProducts directly from the fetched feed order.
+        // This lets callers use activeProducts for updateListingCache() without
+        // accessing store.products relationship (~600 faults avoided per trace).
+        var activeProducts: [Product] = []
+        activeProducts.reserveCapacity(shopifyProducts.count)
+
+        var changes: [ChangeEvent] = []
+
+        Log.sync.info("saveProducts process_fetched START \(ThreadInfo.current)")
+        for (index, shopifyProduct) in shopifyProducts.enumerated() {
+            // Yield every 50 products (~20ms) to let queued reads through
+            if index > 0, index.isMultiple(of: 50) {
+                await Task.yield()
+            }
+
+            if let existing = existingByShopifyId[shopifyProduct.id] {
+                // If it was previously removed, revive it instead of inserting a duplicate.
+                if existing.isRemoved { existing.isRemoved = false }
+
+                changes.append(contentsOf: detectChanges(existing: existing, fetched: shopifyProduct))
+                updateProduct(existing, from: shopifyProduct)
+                activeProducts.append(existing)
+            } else {
+                let product = createProduct(from: shopifyProduct)
+                product.store = store
+                modelContext.insert(product)
+                activeProducts.append(product)
+
+                changes.append(ChangeEvent(changeType: .newProduct, productTitle: shopifyProduct.title))
+            }
+        }
         Log.sync.info("saveProducts process_fetched END \(ThreadInfo.current) changes=\(changes.count)")
 
+        // Mark products removed: only consider the ones that were active going into the sync.
         Log.sync.info("saveProducts process_removed START \(ThreadInfo.current)")
-        changes += processRemovedProducts(existingProducts, fetchedIds: fetchedIds)
+        for existing in existingActive where !fetchedIdSet.contains(existing.shopifyId) {
+            if !existing.isRemoved {
+                changes.append(ChangeEvent(changeType: .productRemoved, productTitle: existing.title))
+            }
+            existing.isRemoved = true
+        }
         Log.sync.info("saveProducts process_removed END \(ThreadInfo.current)")
 
-        // Batch insert
+        // Batch insert changes
         Log.sync.info("saveProducts batch_insert START \(ThreadInfo.current) count=\(changes.count)")
         for change in changes {
             change.store = store
@@ -76,50 +146,8 @@ extension StoreService {
         }
         Log.sync.info("saveProducts batch_insert END \(ThreadInfo.current)")
         logContextState("saveProducts after batch insert")
-        return changes
-    }
 
-    private func processFetchedProducts(
-        _ shopifyProducts: [ShopifyProduct],
-        existingByShopifyId: [Int64: Product],
-        store: Store
-    ) -> [ChangeEvent] {
-        let methodStart = entering("processFetchedProducts")
-        defer { exiting("processFetchedProducts", start: methodStart) }
-
-        var changes: [ChangeEvent] = []
-        for shopifyProduct in shopifyProducts {
-            if let existing = existingByShopifyId[shopifyProduct.id] {
-                let productChanges = detectChanges(existing: existing, fetched: shopifyProduct)
-                changes.append(contentsOf: productChanges)
-                updateProduct(existing, from: shopifyProduct)
-            } else {
-                let product = createProduct(from: shopifyProduct)
-                product.store = store
-                modelContext.insert(product)
-                // Don't pass store here - it will be set during batch insert
-                changes.append(ChangeEvent(changeType: .newProduct, productTitle: shopifyProduct.title))
-            }
-        }
-        return changes
-    }
-
-    private func processRemovedProducts(
-        _ existingProducts: [Product],
-        fetchedIds: Set<Int64>
-    ) -> [ChangeEvent] {
-        let methodStart = entering("processRemovedProducts")
-        defer { exiting("processRemovedProducts", start: methodStart) }
-
-        var changes: [ChangeEvent] = []
-        for existing in existingProducts where !fetchedIds.contains(existing.shopifyId) {
-            if !existing.isRemoved {
-                // Don't pass store here - it will be set during batch insert
-                changes.append(ChangeEvent(changeType: .productRemoved, productTitle: existing.title))
-            }
-            existing.isRemoved = true
-        }
-        return changes
+        return SaveProductsResult(changes: changes, activeProducts: activeProducts)
     }
 
     private func detectChanges(
@@ -283,14 +311,15 @@ extension StoreService {
         let methodStart = entering("updateProduct")
         defer { exiting("updateProduct", start: methodStart) }
 
-        product.title = shopify.title
-        product.handle = shopify.handle
-        product.vendor = shopify.vendor
-        product.productType = shopify.productType
-        product.lastSeenAt = Date()
-        product.isRemoved = false
+        // Dirty-checking: only assign if changed to avoid marking Product dirty
+        if product.title != shopify.title { product.title = shopify.title }
+        if product.handle != shopify.handle { product.handle = shopify.handle }
+        if product.vendor != shopify.vendor { product.vendor = shopify.vendor }
+        if product.productType != shopify.productType { product.productType = shopify.productType }
+        // isRemoved is already guarded in caller (line 110)
 
-        product.imageURLs = shopify.images.map { $0.src }
+        let newImageURLs = shopify.images.map { $0.src }
+        if product.imageURLs != newImageURLs { product.imageURLs = newImageURLs }
 
         // PERF: Same N+1 faulting issue as detectChanges() - see comment there.
         // Prefetching loads relationships but property access still triggers faulting.
@@ -314,12 +343,15 @@ extension StoreService {
                     modelContext.insert(snapshot)
                 }
 
-                existing.title = shopifyVariant.title
-                existing.sku = shopifyVariant.sku
-                existing.price = shopifyVariant.price
-                existing.compareAtPrice = shopifyVariant.compareAtPrice
-                existing.available = shopifyVariant.available
-                existing.position = shopifyVariant.position
+                // Dirty-checking: only assign if changed to avoid marking Variant dirty
+                if existing.title != shopifyVariant.title { existing.title = shopifyVariant.title }
+                if existing.sku != shopifyVariant.sku { existing.sku = shopifyVariant.sku }
+                if existing.price != shopifyVariant.price { existing.price = shopifyVariant.price }
+                if existing.compareAtPrice != shopifyVariant.compareAtPrice {
+                    existing.compareAtPrice = shopifyVariant.compareAtPrice
+                }
+                if existing.available != shopifyVariant.available { existing.available = shopifyVariant.available }
+                if existing.position != shopifyVariant.position { existing.position = shopifyVariant.position }
             } else {
                 let variant = Variant(
                     shopifyId: shopifyVariant.id,

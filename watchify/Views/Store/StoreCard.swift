@@ -36,7 +36,7 @@ struct StoreCard: View {
                             }
                     } else {
                         ForEach(previewImages, id: \.self) { url in
-                            AsyncImage(url: url) { image in
+                            CachedAsyncImage(url: url, displaySize: .storePreview) { image in
                                 image
                                     .resizable()
                                     .scaledToFill()
