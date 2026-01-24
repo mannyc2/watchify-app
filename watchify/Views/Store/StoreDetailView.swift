@@ -153,7 +153,7 @@ private struct StoreDetailContentView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .navigation) {
+        ToolbarItem(placement: .primaryAction) {
             Button {
                 Task { await viewModel.sync() }
             } label: {
@@ -166,7 +166,7 @@ private struct StoreDetailContentView: View {
                 }
             }
             .disabled(viewModel.isSyncing || isOffline)
-            .help(isOffline ? "No internet connection" : "Refresh products from store")
+            .help(isOffline ? "No internet connection" : "Sync products from store")
             .accessibilityLabel(isOffline ? "Offline, sync unavailable" : "Sync products from store")
             .popoverTip(SyncTip())
         }

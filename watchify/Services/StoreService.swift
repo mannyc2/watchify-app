@@ -355,48 +355,6 @@ actor StoreService: ModelActor {
         }
     }
 
-    // MARK: - Test Data Seeding
-
-    /// Seeds mock data for UI testing. Only call when using in-memory store.
-    func seedTestData() {
-        let store = Store(name: "Test Store", domain: "test-store.myshopify.com")
-        modelContext.insert(store)
-
-        // Add some products with variants
-        for idx in 1...5 {
-            let product = Product(
-                shopifyId: Int64(idx),
-                handle: "test-product-\(idx)",
-                title: "Test Product \(idx)"
-            )
-            product.store = store
-            modelContext.insert(product)
-
-            let variant = Variant(
-                shopifyId: Int64(idx * 100),
-                title: "Default",
-                price: Decimal(19.99 + Double(idx)),
-                available: idx % 2 == 0,
-                position: idx
-            )
-            variant.product = product
-            modelContext.insert(variant)
-        }
-
-        // Add a change event so Activity has something to show
-        let event = ChangeEvent(
-            changeType: .priceDropped,
-            productTitle: "Test Product 1",
-            variantTitle: "Default",
-            oldValue: "$29.99",
-            newValue: "$19.99",
-            store: store
-        )
-        modelContext.insert(event)
-
-        try? modelContext.save()
-    }
-
     // MARK: - Cleanup
 
     /// Deletes snapshots older than the specified date

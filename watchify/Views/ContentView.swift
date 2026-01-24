@@ -40,6 +40,7 @@ struct ContentView: View {
                     NavigationStack {
                         StoreDetailView(storeDTO: storeDTO, container: container)
                     }
+                    .id(id)
                 } else {
                     // swiftlint:disable:next redundant_discardable_let
                     let _ = Log.nav.warning("Store lookup miss id=\(id)")

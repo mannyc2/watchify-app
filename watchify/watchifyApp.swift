@@ -116,8 +116,6 @@ struct WatchifyApp: App {
 
     /// Whether running in UI test mode (in-memory database)
     static let isUITesting = CommandLine.arguments.contains("-UITesting")
-    /// Whether to seed mock data for UI tests
-    static let seedTestData = CommandLine.arguments.contains("-SeedTestData")
 
     init() {
         do {
@@ -162,9 +160,9 @@ struct WatchifyApp: App {
                 }
 
                 // Seed mock data for UI tests if requested
-                if Self.seedTestData {
+                if Self.isUITesting {
                     await Task.detached {
-                        await StoreService.shared.seedTestData()
+                        await StoreService.shared.seedTestDataIfNeeded()
                     }.value
                 }
 

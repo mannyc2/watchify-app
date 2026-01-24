@@ -46,12 +46,10 @@ struct AddStoreSheet: View {
                 Text(error)
                     .foregroundStyle(.red)
                     .font(.caption)
-                    .accessibilityAddTraits(.isStaticText)
+                    .accessibilityIdentifier("AddStoreError")
             }
         }
         .formStyle(.grouped)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Add store form")
         .frame(minWidth: 300)
         .disabled(isAdding)
         .toolbar {

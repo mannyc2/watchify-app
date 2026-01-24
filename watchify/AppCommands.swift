@@ -29,8 +29,8 @@ struct AppCommands: Commands {
         // Standard toolbar commands
         ToolbarCommands()
 
-        // File menu: Add Store (⌘N)
-        CommandGroup(after: .newItem) {
+        // File menu: Add Store (⌘N) - replaces default New Window
+        CommandGroup(replacing: .newItem) {
             Button("Add Store...") {
                 showAddStore?.wrappedValue = true
             }

@@ -21,11 +21,13 @@ struct SidebarView: View {
         List(selection: $selection) {
             Label("Overview", systemImage: "square.grid.2x2")
                 .tag(SidebarSelection.overview)
+                .accessibilityIdentifier("SidebarItem-Overview")
 
             Label("Activity", systemImage: "clock.arrow.circlepath")
                 .badge(viewModel.unreadCount)
                 .tag(SidebarSelection.activity)
                 .accessibilityLabel("Activity, \(viewModel.unreadCount) unread")
+                .accessibilityIdentifier("SidebarItem-Activity")
 
             Section("Stores") {
                 ForEach(viewModel.stores) { store in
@@ -37,16 +39,21 @@ struct SidebarView: View {
                     }
                     .tag(SidebarSelection.store(store.id))
                 }
-
-                Button { onAddStore() } label: {
-                    Label("Add Store", systemImage: "plus")
-                }
-                .buttonStyle(.glass)
-                .popoverTip(AddStoreTip())
-                .help("Add a Shopify store to monitor")
             }
         }
         .navigationTitle("Watchify")
+        .safeAreaInset(edge: .bottom) {
+            Button { onAddStore() } label: {
+                Label("Add Store", systemImage: "plus")
+            }
+            .buttonStyle(.borderless)
+            .accessibilityIdentifier("AddStoreButton")
+            .popoverTip(AddStoreTip())
+            .help("Add a Shopify store to monitor")
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Sidebar navigation")
     }

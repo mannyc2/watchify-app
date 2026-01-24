@@ -26,6 +26,8 @@ struct StoreRow: View {
         }
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
+        .accessibilityLabel(store.name)
+        .accessibilityIdentifier("StoreRow-\(store.name)")
         .contextMenu {
             Button(role: .destructive) {
                 onDelete?()
