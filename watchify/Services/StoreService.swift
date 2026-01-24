@@ -7,14 +7,6 @@ import Foundation
 import OSLog
 import SwiftData
 
-// MARK: - Queue Diagnostics
-
-extension DispatchQueue {
-    nonisolated static var currentLabel: String {
-        String(validatingUTF8: __dispatch_queue_get_label(nil)) ?? "unknown"
-    }
-}
-
 // MARK: - Errors
 
 enum SyncError: Error, LocalizedError {
@@ -148,30 +140,6 @@ actor StoreService: ModelActor {
 
     nonisolated let api: ShopifyAPIProtocol
 
-    // MARK: - Actor Diagnostics
-
-    private var methodDepth = 0
-
-    func entering(_ method: StaticString) -> CFAbsoluteTime {
-        methodDepth += 1
-        let threadInfo = ThreadInfo.current
-        Log.sync.info(
-            ">>> \(method, privacy: .public) ENTER depth=\(self.methodDepth) \(threadInfo)")
-        return CFAbsoluteTimeGetCurrent()
-    }
-
-    func exiting(_ method: StaticString, start: CFAbsoluteTime) {
-        let elapsed = CFAbsoluteTimeGetCurrent() - start
-        Log.sync.info(
-            "<<< \(method, privacy: .public) EXIT depth=\(self.methodDepth) dt=\(elapsed, format: .fixed(precision: 4))s"
-        )
-        methodDepth -= 1
-    }
-
-    func logContextState(_ label: StaticString) {
-        modelContext.logState(label)
-    }
-
     // MARK: - Initialization
 
     /// Private init - use `makeBackground(container:api:)` factory method instead.
@@ -181,9 +149,6 @@ actor StoreService: ModelActor {
         self.modelExecutor = DefaultSerialModelExecutor(modelContext: context)
         self.modelContainer = container
         self.api = api
-
-        Log.sync.info(
-            "StoreService.init isMainThread=\(Thread.isMainThread) thread=\(Thread.current)")
     }
 
     /// Creates a StoreService that executes on a background thread.
@@ -202,9 +167,6 @@ actor StoreService: ModelActor {
     /// Adds a new store and fetches its initial products.
     /// Returns the store's UUID (model objects can't cross actor boundaries).
     func addStore(name: String?, domain: String) async throws -> UUID {
-        let methodStart = entering("addStore")
-        defer { exiting("addStore", start: methodStart) }
-
         let products = try await api.fetchProducts(domain: domain)
 
         let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -217,30 +179,18 @@ actor StoreService: ModelActor {
         store.lastFetchedAt = Date()
         store.updateListingCache(products: result.activeProducts)
 
-        logContextState("addStore before save")
-        try ActorTrace.contextOp("addStore-save", context: modelContext) {
-            try modelContext.save()
-        }
-        logContextState("addStore after save")
+        try modelContext.save()
         return store.id
     }
 
     /// Syncs a store by its ID, returning DTOs for any changes detected.
     @discardableResult
     func syncStore(storeId: UUID) async throws -> [ChangeEventDTO] {
-        let methodStart = entering("syncStore")
-        defer { exiting("syncStore", start: methodStart) }
-
-        let startThread = ThreadInfo.current.description
-        Log.sync.info("syncStore START storeId=\(storeId) \(startThread)")
-
         let predicate = #Predicate<Store> { $0.id == storeId }
         var descriptor = FetchDescriptor(predicate: predicate)
         descriptor.fetchLimit = 1
 
-        let store = try ActorTrace.contextOp("fetch-store", context: modelContext) {
-            try modelContext.fetch(descriptor).first
-        }
+        let store = try modelContext.fetch(descriptor).first
         guard let store else { throw SyncError.storeNotFound }
 
         // Rate limit check: 60s minimum between syncs
@@ -253,72 +203,27 @@ actor StoreService: ModelActor {
         }
 
         store.isSyncing = true
-        let syncStart = CFAbsoluteTimeGetCurrent()
-        logContextState("syncStore before save[isSyncing]")
-        try ActorTrace.contextOp("syncStore-save-isSyncing", context: modelContext) {
-            try modelContext.save()
-        }
-        logContextState("syncStore after save[isSyncing]")
-        Log.sync.info("syncStore SAVE[isSyncing] dt=\(CFAbsoluteTimeGetCurrent() - syncStart)s")
+        try modelContext.save()
 
         defer {
             store.isSyncing = false
-            let deferStart = CFAbsoluteTimeGetCurrent()
-            logContextState("syncStore before save[defer]")
-            try? ActorTrace.contextOp("syncStore-save-defer", context: modelContext) {
-                try modelContext.save()
-            }
-            logContextState("syncStore after save[defer]")
-            Log.sync.info("syncStore SAVE[defer] dt=\(CFAbsoluteTimeGetCurrent() - deferStart)s")
+            try? modelContext.save()
         }
 
-        let fetchStart = CFAbsoluteTimeGetCurrent()
-        Log.sync.info("syncStore API_START \(ThreadInfo.current)")
         let shopifyProducts = try await api.fetchProducts(domain: store.domain)
-        let apiFetchTime = CFAbsoluteTimeGetCurrent() - fetchStart
-        Log.sync.info(
-            "syncStore API_END \(ThreadInfo.current) dt=\(apiFetchTime)s count=\(shopifyProducts.count)"
-        )
-
-        let saveProductsStart = CFAbsoluteTimeGetCurrent()
         let result = await saveProducts(shopifyProducts, to: store, isInitialImport: false)
-        let saveTime = CFAbsoluteTimeGetCurrent() - saveProductsStart
-        let changeCount = result.changes.count
-        let productCount = result.activeProducts.count
-        Log.sync.info(
-            "syncStore saveProducts dt=\(saveTime)s changes=\(changeCount) activeProducts=\(productCount)"
-        )
 
-        let cacheStart = CFAbsoluteTimeGetCurrent()
         store.lastFetchedAt = Date()
         store.updateListingCache(products: result.activeProducts)
-        Log.sync.info("syncStore updateCache dt=\(CFAbsoluteTimeGetCurrent() - cacheStart)s")
 
-        let finalSaveStart = CFAbsoluteTimeGetCurrent()
-        Log.sync.info("syncStore SAVE[final] START \(ThreadInfo.current)")
-        logContextState("syncStore before save[final]")
-        try ActorTrace.contextOp("syncStore-save-final", context: modelContext) {
-            try modelContext.save()
-        }
-        logContextState("syncStore after save[final]")
-        let finalSaveTime = CFAbsoluteTimeGetCurrent() - finalSaveStart
-        Log.sync.info("syncStore SAVE[final] END \(ThreadInfo.current) dt=\(finalSaveTime)s")
-
-        Log.sync.info("syncStore END totalSync=\(CFAbsoluteTimeGetCurrent() - syncStart)s")
+        try modelContext.save()
         return result.changes.map { ChangeEventDTO(from: $0) }
     }
 
     /// Syncs all stores. Used by the background sync loop.
     func syncAllStores() async {
-        let methodStart = entering("syncAllStores")
-        defer { exiting("syncAllStores", start: methodStart) }
-
-        let threadDesc = ThreadInfo.current.description
-        Log.sync.info("syncAllStores START \(threadDesc)")
         do {
-            let stores = try ActorTrace.contextOp("fetch-stores", context: modelContext) {
-                try modelContext.fetch(FetchDescriptor<Store>())
-            }
+            let stores = try modelContext.fetch(FetchDescriptor<Store>())
             guard !stores.isEmpty else { return }
 
             for store in stores {
@@ -336,12 +241,9 @@ actor StoreService: ModelActor {
             if UserDefaults.standard.bool(forKey: "autoDeleteEvents") {
                 let days = UserDefaults.standard.integer(forKey: "eventRetentionDays")
                 if days > 0,
-                    let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: Date())
-                {
+                   let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: Date()) {
                     let predicate = #Predicate<ChangeEvent> { $0.occurredAt < cutoff }
-                    _ = try? ActorTrace.contextOp("delete-old-events", context: modelContext) {
-                        try modelContext.delete(model: ChangeEvent.self, where: predicate)
-                    }
+                    try? modelContext.delete(model: ChangeEvent.self, where: predicate)
                 }
             }
 
@@ -349,16 +251,10 @@ actor StoreService: ModelActor {
             if UserDefaults.standard.bool(forKey: "autoDeleteSnapshots") {
                 let days = UserDefaults.standard.integer(forKey: "snapshotRetentionDays")
                 if days > 0,
-                    let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: Date())
-                {
-                    _ = try? ActorTrace.contextOp("delete-old-snapshots", context: modelContext) {
-                        try deleteOldSnapshots(olderThan: cutoff)
-                    }
+                   let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: Date()) {
+                    try? deleteOldSnapshots(olderThan: cutoff)
                 }
             }
-
-            let endThreadDesc = ThreadInfo.current.description
-            Log.sync.info("syncAllStores END \(endThreadDesc)")
         } catch {
             Log.sync.error("Failed to fetch stores: \(error)")
         }

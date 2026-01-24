@@ -5,7 +5,6 @@
 
 import CoreData
 import Foundation
-import OSLog
 
 /// ViewModel for ContentView, SidebarView, and OverviewView.
 /// Replaces @Query to avoid main thread hangs during sync.
@@ -22,8 +21,6 @@ final class StoreListViewModel {
     private var refreshTask: Task<Void, Never>?
     private nonisolated(unsafe) var observer: (any NSObjectProtocol)?
     private let isPreview: Bool
-    private var pendingNotificationCount = 0
-    private var lastRefreshTime: CFAbsoluteTime = 0
 
     // MARK: - Initializers
 
@@ -72,14 +69,9 @@ final class StoreListViewModel {
             object: nil,
             queue: nil  // Receive on posting thread, not main
         ) { [weak self] _ in
-            let notifyStart = CFAbsoluteTimeGetCurrent()
             // Break out of notification delivery before touching actors
             DispatchQueue.main.async {
                 Task { @MainActor [weak self] in
-                    self?.pendingNotificationCount += 1
-                    let notifyDelay = CFAbsoluteTimeGetCurrent() - notifyStart
-                    let count = self?.pendingNotificationCount ?? 0
-                    Log.ui.debug("StoreListVM: notify #\(count) delay=\(notifyDelay)s")
                     self?.refreshDebounced()
                 }
             }
@@ -95,16 +87,9 @@ final class StoreListViewModel {
 
         stores = await storesTask
         unreadCount = await unreadTask
-
-        Log.ui.debug(
-            "StoreListViewModel: loaded \(self.stores.count) stores, \(self.unreadCount) unread")
     }
 
     func refresh() async {
-        let start = CFAbsoluteTimeGetCurrent()
-        let coalescedCount = pendingNotificationCount
-        pendingNotificationCount = 0
-
         // CRITICAL: Fetch on detached task to avoid main thread blocking.
         // SwiftData's ModelActor executor deadlocks if main thread awaits
         // while the actor is in a blocking save operation.
@@ -117,13 +102,6 @@ final class StoreListViewModel {
 
         stores = newStores
         unreadCount = newUnread
-
-        let elapsed = CFAbsoluteTimeGetCurrent() - start
-        let sinceLast = start - lastRefreshTime
-        lastRefreshTime = start
-        Log.ui.debug(
-            "StoreListVM: refresh \(elapsed, format: .fixed(precision: 3))s coalesced=\(coalescedCount) sinceLast=\(sinceLast, format: .fixed(precision: 1))s"
-        )
     }
 
     func deleteStore(id: UUID) async {

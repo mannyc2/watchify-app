@@ -76,10 +76,12 @@ final class UnreadCountObserver {
 nonisolated func syncAllStoresWithErrorTracking() async {
     // Fetch store IDs (UUIDs are Sendable, Store objects are not)
     let storeIds = await StoreService.shared.fetchAllStoreIds()
+    var allChanges: [ChangeEventDTO] = []
 
     for storeId in storeIds {
         do {
-            _ = try await StoreService.shared.syncStore(storeId: storeId)
+            let changes = try await StoreService.shared.syncStore(storeId: storeId)
+            allChanges.append(contentsOf: changes)
 
             // Record success on main actor
             await MainActor.run {
@@ -102,6 +104,16 @@ nonisolated func syncAllStoresWithErrorTracking() async {
                 BackgroundSyncState.shared.recordError(syncError, forStore: storeId)
             }
             Log.sync.error("Background sync failed for store \(storeId): \(error)")
+        }
+    }
+
+    // Send notifications for all detected changes
+    if !allChanges.isEmpty {
+        let changesToSend = allChanges
+        await MainActor.run {
+            Task {
+                await NotificationService.shared.sendIfAuthorized(for: changesToSend)
+            }
         }
     }
 }
@@ -173,14 +185,11 @@ struct WatchifyApp: App {
 
                 // Start background sync loop
                 Task.detached(priority: .utility) {
-                    Log.sync.info("SyncLoop START \(ThreadInfo.current)")
                     let intervalMinutes = UserDefaults.standard.integer(forKey: "syncIntervalMinutes")
                     let interval = max(intervalMinutes, 5) * 60 // minimum 5 minutes
 
                     while !Task.isCancelled {
-                        Log.sync.info("SyncLoop BEFORE_SYNC \(ThreadInfo.current)")
                         await syncAllStoresWithErrorTracking()
-                        Log.sync.info("SyncLoop AFTER_SYNC \(ThreadInfo.current)")
                         try? await Task.sleep(for: .seconds(interval))
                     }
                 }

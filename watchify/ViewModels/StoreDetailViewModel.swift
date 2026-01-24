@@ -4,7 +4,6 @@
 //
 
 import Foundation
-import OSLog
 
 /// ViewModel for StoreDetailView. Runs on MainActor, communicates with
 /// StoreService via Sendable DTOs for background data fetching.
@@ -102,8 +101,6 @@ final class StoreDetailViewModel {
         isLoading = true
         defer { isLoading = false }
 
-        let fetchStart = CFAbsoluteTimeGetCurrent()
-
         // Capture filter state for background task
         let id = storeId
         let search = searchText
@@ -115,7 +112,7 @@ final class StoreDetailViewModel {
         // SwiftData's ModelActor uses performBlockAndWait which blocks if main
         // thread awaits while actor is mid-save.
         let (fetchedProducts, fetchedCount) = await Task.detached {
-            let products = await StoreService.shared.fetchProducts(
+            let request = ProductFetchRequest(
                 storeId: id,
                 searchText: search,
                 stockScope: scope,
@@ -123,6 +120,7 @@ final class StoreDetailViewModel {
                 offset: 0,
                 limit: 10000
             )
+            let products = await StoreService.shared.fetchProducts(request)
 
             let count: Int
             if needsFilteredCount {
@@ -140,10 +138,6 @@ final class StoreDetailViewModel {
 
         products = fetchedProducts
         filteredCount = fetchedCount >= 0 ? fetchedCount : totalCount
-
-        let fetchTime = CFAbsoluteTimeGetCurrent() - fetchStart
-        let count = products.count
-        Log.ui.debug("StoreDetailViewModel.fetchProducts: \(count) products, time=\(fetchTime)s")
     }
 
     /// Syncs the store and refreshes products.
@@ -166,7 +160,7 @@ final class StoreDetailViewModel {
             let changes = try await Task.detached {
                 try await StoreService.shared.syncStore(storeId: id)
             }.value
-            await NotificationService.shared.send(for: changes)
+            await NotificationService.shared.sendIfAuthorized(for: changes)
 
             // Refresh counts and products (also via detached)
             let newCount = await Task.detached {

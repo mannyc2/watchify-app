@@ -166,8 +166,7 @@ final class ActivityViewModel {
         var parts: [String] = []
 
         if let storeId = selectedStoreId,
-            let store = stores.first(where: { $0.id == storeId })
-        {
+           let store = stores.first(where: { $0.id == storeId }) {
             parts.append(store.name)
         }
 
@@ -186,25 +185,19 @@ final class ActivityViewModel {
 
     /// Rebuilds the flattened list items. Called when `events` changes.
     private func rebuildListItems() {
-        let start = CFAbsoluteTimeGetCurrent()
         lastEventId = events.last?.id
 
         let calendar = Calendar.current
 
         // Group by date
-        let groupStart = CFAbsoluteTimeGetCurrent()
         let grouped = Dictionary(grouping: events) { event in
             calendar.startOfDay(for: event.occurredAt)
         }
-        let groupTime = CFAbsoluteTimeGetCurrent() - groupStart
 
         // Sort groups
-        let sortStart = CFAbsoluteTimeGetCurrent()
         let sorted = grouped.sorted { $0.key > $1.key }
-        let sortTime = CFAbsoluteTimeGetCurrent() - sortStart
 
         // Flatten into list items
-        let flattenStart = CFAbsoluteTimeGetCurrent()
         var items: [ActivityListItem] = []
         items.reserveCapacity(events.count + sorted.count)
         for (date, groupEvents) in sorted {
@@ -214,16 +207,8 @@ final class ActivityViewModel {
                 items.append(.event(event, showDivider: !isLast))
             }
         }
-        let flattenTime = CFAbsoluteTimeGetCurrent() - flattenStart
 
         listItems = items
-
-        let totalTime = CFAbsoluteTimeGetCurrent() - start
-        let eventCount = events.count
-        let itemCount = items.count
-        Log.ui.info(
-            "rebuildListItems: events=\(eventCount) items=\(itemCount) total=\(totalTime)s group=\(groupTime)s sort=\(sortTime)s flatten=\(flattenTime)s"
-        )
     }
 
     private func sectionTitle(for date: Date, calendar: Calendar) -> String {
@@ -252,8 +237,6 @@ final class ActivityViewModel {
         let offset = currentOffset
         let limit = pageSize
 
-        let fetchStart = CFAbsoluteTimeGetCurrent()
-
         // CRITICAL: Use Task.detached for StoreService calls to avoid deadlock.
         let fetched = await Task.detached {
             await StoreService.shared.fetchActivityEvents(
@@ -265,16 +248,11 @@ final class ActivityViewModel {
             )
         }.value
 
-        let fetchTime = CFAbsoluteTimeGetCurrent() - fetchStart
-
         if reset {
             events = fetched
         } else {
             events.append(contentsOf: fetched)
         }
-
-        Log.db.debug(
-            "fetchEventsInternal: reset=\(reset) fetched=\(fetched.count) time=\(fetchTime)s")
 
         currentOffset += fetched.count
         hasMore = fetched.count == pageSize

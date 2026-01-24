@@ -10,16 +10,32 @@ import SwiftData
 final class ChangeEvent {
     var id: UUID
     var occurredAt: Date
-    var changeType: ChangeType
     var productTitle: String
     var variantTitle: String?
     var oldValue: String?
     var newValue: String?
     var priceChange: Decimal?
     var isRead: Bool
-    var magnitude: ChangeMagnitude
 
     var store: Store?
+
+    // MARK: - Raw Value Storage (for SwiftData predicate filtering)
+    // Defaults provided for lightweight migration from old schema
+
+    var changeTypeRaw: String = ChangeType.priceDropped.rawValue
+    var magnitudeRaw: String = ChangeMagnitude.medium.rawValue
+
+    // MARK: - Computed Enum Accessors
+
+    var changeType: ChangeType {
+        get { ChangeType(rawValue: changeTypeRaw) ?? .priceDropped }
+        set { changeTypeRaw = newValue.rawValue }
+    }
+
+    var magnitude: ChangeMagnitude {
+        get { ChangeMagnitude(rawValue: magnitudeRaw) ?? .medium }
+        set { magnitudeRaw = newValue.rawValue }
+    }
 
     init(
         changeType: ChangeType,
@@ -33,14 +49,14 @@ final class ChangeEvent {
     ) {
         self.id = UUID()
         self.occurredAt = Date()
-        self.changeType = changeType
+        self.changeTypeRaw = changeType.rawValue
         self.productTitle = productTitle
         self.variantTitle = variantTitle
         self.oldValue = oldValue
         self.newValue = newValue
         self.priceChange = priceChange
         self.isRead = false
-        self.magnitude = magnitude
+        self.magnitudeRaw = magnitude.rawValue
         self.store = store
     }
 }

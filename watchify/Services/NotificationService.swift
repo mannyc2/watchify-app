@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import os
 import UserNotifications
 
 @MainActor
@@ -48,7 +49,7 @@ final class NotificationService {
             let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
             return granted
         } catch {
-            print("[NotificationService] Permission request failed: \(error)")
+            Log.sync.error("NotificationService permission request failed: \(error)")
             return false
         }
     }
@@ -59,7 +60,7 @@ final class NotificationService {
     }
 
     /// Request permission only if not yet determined
-    func requestPermissionIfNeeded() async -> Bool {
+    private func requestPermissionIfNeeded() async -> Bool {
         let status = await authorizationStatus()
         switch status {
         case .notDetermined:
@@ -86,15 +87,11 @@ final class NotificationService {
         // Check master toggle - default to true if not set
         if UserDefaults.standard.object(forKey: "notificationsEnabled") != nil,
            !UserDefaults.standard.bool(forKey: "notificationsEnabled") {
-            print("[NotificationService] Notifications disabled in settings")
             return
         }
 
         let status = await center.authorizationStatus()
-        guard status == .authorized else {
-            print("[NotificationService] Not authorized to send notifications")
-            return
-        }
+        guard status == .authorized else { return }
 
         // Group changes by store
         let groupedByStore = Dictionary(grouping: changes) { $0.storeId }
@@ -126,9 +123,9 @@ final class NotificationService {
 
             do {
                 try await center.add(request)
-                print("[NotificationService] Notification sent for \(filteredChanges.count) changes (\(content.title))")
+                Log.sync.info("NotificationService sent \(filteredChanges.count) changes (\(content.title))")
             } catch {
-                print("[NotificationService] Failed to send notification: \(error)")
+                Log.sync.error("NotificationService failed: \(error)")
             }
         }
     }

@@ -24,10 +24,6 @@ struct ShopifyAPI: ShopifyAPIProtocol {
     /// Fetches products from Shopify. Explicitly nonisolated to avoid MainActor hop
     /// when called from background ModelActor (with -default-isolation=MainActor).
     nonisolated func fetchProducts(domain: String) async throws -> [ShopifyProduct] {
-        // DIAG: Log thread at API entry
-        let entryThread = ThreadInfo.current.description
-        Log.sync.info("API fetchProducts START \(entryThread)")
-
         var allProducts: [ShopifyProduct] = []
         var page = 1
 
@@ -37,15 +33,7 @@ struct ShopifyAPI: ShopifyAPIProtocol {
                 throw ShopifyAPIError.invalidResponse
             }
 
-            // DIAG: Log thread before network call
-            let beforeNetThread = ThreadInfo.current.description
-            Log.sync.debug("API beforeNetwork page=\(page) \(beforeNetThread)")
-
             let (data, response) = try await session.data(from: url)
-
-            // DIAG: Log thread after network call
-            let afterNetThread = ThreadInfo.current.description
-            Log.sync.debug("API afterNetwork page=\(page) \(afterNetThread)")
 
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw ShopifyAPIError.invalidResponse
@@ -66,10 +54,6 @@ struct ShopifyAPI: ShopifyAPIProtocol {
             allProducts.append(contentsOf: result.products)
             page += 1
         }
-
-        // DIAG: Log thread at API exit
-        let exitThread = ThreadInfo.current.description
-        Log.sync.info("API fetchProducts END count=\(allProducts.count) \(exitThread)")
 
         return allProducts
     }

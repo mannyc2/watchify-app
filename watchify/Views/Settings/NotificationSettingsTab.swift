@@ -4,9 +4,11 @@
 //
 
 import SwiftUI
+import UserNotifications
 
 struct NotificationSettingsTab: View {
     @AppStorage("notificationsEnabled") private var enabled = true
+    @State private var authorizationStatus: UNAuthorizationStatus = .notDetermined
     @AppStorage("notifyPriceDropped") private var priceDropped = true
     @AppStorage("notifyPriceIncreased") private var priceIncreased = true
     @AppStorage("notifyBackInStock") private var backInStock = true
@@ -20,8 +22,25 @@ struct NotificationSettingsTab: View {
     var body: some View {
         Form {
             Section {
+                HStack {
+                    authorizationStatusIcon
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(authorizationStatusTitle)
+                        if let hint = authorizationStatusHint {
+                            Text(hint)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(authorizationStatusAccessibilityLabel)
+            }
+
+            Section {
                 Toggle("Enable notifications", isOn: $enabled)
                     .accessibilityHint("Enable or disable all notifications")
+                    .disabled(authorizationStatus == .denied)
             }
 
             Section("Notify me about") {
@@ -62,7 +81,7 @@ struct NotificationSettingsTab: View {
                 Toggle("Image changes", isOn: $imagesChanged)
                     .accessibilityHint("Notify when product images are updated")
             }
-            .disabled(!enabled)
+            .disabled(!enabled || authorizationStatus == .denied)
 
             Section {
                 Button("Open System Notification Settings") {
@@ -72,6 +91,76 @@ struct NotificationSettingsTab: View {
             }
         }
         .formStyle(.grouped)
+        .task {
+            await checkAuthorizationStatus()
+        }
+        .onChange(of: enabled) { _, newValue in
+            if newValue && authorizationStatus == .notDetermined {
+                Task {
+                    _ = await NotificationService.shared.requestPermission()
+                    await checkAuthorizationStatus()
+                }
+            }
+        }
+    }
+
+    // MARK: - Authorization Status UI
+
+    private var authorizationStatusIcon: some View {
+        Group {
+            switch authorizationStatus {
+            case .authorized:
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            case .denied:
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.red)
+            case .notDetermined:
+                Image(systemName: "questionmark.circle.fill")
+                    .foregroundStyle(.orange)
+            default:
+                Image(systemName: "questionmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .imageScale(.large)
+        .accessibilityHidden(true)
+    }
+
+    private var authorizationStatusTitle: String {
+        switch authorizationStatus {
+        case .authorized:
+            return "System notifications enabled"
+        case .denied:
+            return "System notifications blocked"
+        case .notDetermined:
+            return "Permission not yet requested"
+        default:
+            return "Unknown status"
+        }
+    }
+
+    private var authorizationStatusHint: String? {
+        switch authorizationStatus {
+        case .denied:
+            return "Enable in System Settings to receive notifications"
+        default:
+            return nil
+        }
+    }
+
+    private var authorizationStatusAccessibilityLabel: String {
+        var label = authorizationStatusTitle
+        if let hint = authorizationStatusHint {
+            label += ". \(hint)"
+        }
+        return label
+    }
+
+    // MARK: - Helpers
+
+    private func checkAuthorizationStatus() async {
+        authorizationStatus = await NotificationService.shared.authorizationStatus()
     }
 
     private func openNotificationSettings() {

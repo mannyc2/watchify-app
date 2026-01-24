@@ -9,21 +9,32 @@ All notable changes to Watchify. Format based on [Keep a Changelog](https://keep
 - UI test files: `SyncTests`, `NavigationTests`, `AddStoreTests`, `DeleteStoreTests`, `SettingsTests`, `ErrorStateTests`
 - Accessibility identifiers for UI testing
 - `Helpers/Tags.swift` consolidating all test tag definitions
+- Activity filtering tests (`StoreServiceTests+ActivityFiltering.swift`) covering store, type, date, and combined filters
+- Authorization status indicator in notification settings (icon + text for authorized/denied/notDetermined)
+- Permission tests (`NotificationServiceTests+Permission.swift`) covering authorization flows
 
 ### Fixed
+- **Activity filters not working**: SwiftData `#Predicate` doesn't support enum comparison; added `changeTypeRaw`/`magnitudeRaw` stored properties with computed enum accessors
+- **Background sync not sending notifications**: Changes were discarded; now aggregates across stores and calls `sendIfAuthorized()`
+- **Manual sync not prompting for permission**: Changed `send()` → `sendIfAuthorized()` in `StoreDetailViewModel`
+- **Settings toggle not requesting permission**: Added `.onChange(of: enabled)` to request system permission when toggled on
 - Sync button toolbar placement: `.navigation` → `.primaryAction` per HIG
 - Add Store button moved to `safeAreaInset(edge: .bottom)` for consistent visibility
 - `NavigationStack` uses `.id(id)` to force view recreation on selection change
 - `SaveProductsResult` Swift 6 strict concurrency with `nonisolated(unsafe)` markers
 
 ### Changed
+- `ChangeEvent` model: enum properties stored as rawValue strings for SwiftData predicate compatibility
 - Unit tests reorganized into nested Swift Testing suites (`StoreService/`, `NotificationService/`, `Models/`, `Errors/`)
+- `NotificationService.requestPermissionIfNeeded()` made private (internal detail of `sendIfAuthorized`)
+- Notification settings toggles disabled when system permission is denied
 - UI tests refactored to page object pattern with `XCTContext.runActivity` logging
 - Test data seeding simplified to `-UITesting` flag with `seedTestDataIfNeeded()`
 - Removed swiftlint disable comments (fixed underlying formatting)
 
 ### Removed
 - `watchifyUITests.swift`, `watchifyUITestsLaunchTests.swift` (replaced by focused test files)
+- Verbose debugging logs from ModelActor deadlock investigation (66% reduction: 94 → 32 log calls)
 
 ---
 
@@ -168,4 +179,4 @@ All notable changes to Watchify. Format based on [Keep a Changelog](https://keep
 | 2026-01-21 | Liquid Glass design system |
 | 2026-01-22 | Concurrency fixes, ViewModels, snapshot cleanup, error handling, accessibility |
 | 2026-01-23 | Sync performance, Nuke image loading (326ms hangs → 0ms) |
-| 2026-01-24 | UI test infrastructure, test suite reorganization, Swift 6 concurrency fixes |
+| 2026-01-24 | UI test infrastructure, test suite reorganization, notification permission fixes |
