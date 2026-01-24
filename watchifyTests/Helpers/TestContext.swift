@@ -1,5 +1,5 @@
 //
-//  StoreServiceTestHelpers.swift
+//  TestContext.swift
 //  watchifyTests
 //
 
@@ -66,34 +66,33 @@ enum TestError: Error {
     case storeNotFound
 }
 
-// MARK: - Assertion Helpers
+// MARK: - Variant Helpers
 
-@MainActor
-func fetchEvents(from context: ModelContext) throws -> [ChangeEvent] {
-    let descriptor = FetchDescriptor<ChangeEvent>(
-        sortBy: [SortDescriptor(\.occurredAt, order: .reverse)]
+func makeVariant(
+    id: Int64 = 100,
+    title: String = "Default",
+    sku: String? = nil,
+    price: Decimal,
+    compareAtPrice: Decimal? = nil,
+    available: Bool = true
+) -> ShopifyVariant {
+    ShopifyVariant(
+        id: id,
+        title: title,
+        sku: sku,
+        price: price,
+        compareAtPrice: compareAtPrice,
+        available: available,
+        position: 1
     )
-    return try context.fetch(descriptor)
 }
 
 @MainActor
-func expectEventCount(
-    _ count: Int,
-    in context: ModelContext,
-    sourceLocation: SourceLocation = #_sourceLocation
-) throws {
-    let events = try fetchEvents(from: context)
-    #expect(events.count == count, sourceLocation: sourceLocation)
-}
-
-@MainActor
-func expectEvent(
-    type: ChangeType,
-    count: Int = 1,
-    in context: ModelContext,
-    sourceLocation: SourceLocation = #_sourceLocation
-) throws {
-    let events = try fetchEvents(from: context)
-    let matching = events.filter { $0.changeType == type }
-    #expect(matching.count == count, sourceLocation: sourceLocation)
+func freshVariant(_ variant: Variant, in context: ModelContext) throws -> Variant {
+    let variantId = variant.shopifyId
+    let descriptor = FetchDescriptor<Variant>(predicate: #Predicate { $0.shopifyId == variantId })
+    guard let fresh = try context.fetch(descriptor).first else {
+        fatalError("Variant not found")
+    }
+    return fresh
 }

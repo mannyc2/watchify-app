@@ -11,11 +11,20 @@ import SwiftData
 
 /// Result of saveProducts() - returns changes and active products to avoid
 /// re-faulting store.products relationship after sync.
-struct SaveProductsResult {
-    var changes: [ChangeEvent]
+///
+/// This struct is only used within the StoreService actor and never crosses
+/// actor boundaries. The `nonisolated(unsafe)` markers tell Swift 6 that we
+/// take responsibility for ensuring thread-safe access (guaranteed by the
+/// enclosing ModelActor).
+struct SaveProductsResult: @unchecked Sendable {
+    /// ChangeEvents detected during sync. Marked `nonisolated(unsafe)` because
+    /// ChangeEvent is @MainActor isolated, but we only access this within StoreService.
+    nonisolated(unsafe) var changes: [ChangeEvent]
     /// Products that are currently active (fetched from Shopify, not removed).
     /// Use this for updateListingCache() instead of store.products.
-    var activeProducts: [Product]
+    /// Marked `nonisolated(unsafe)` because Product is @MainActor isolated,
+    /// but we only access this within StoreService.
+    nonisolated(unsafe) var activeProducts: [Product]
 }
 
 // MARK: - Sync Implementation
@@ -66,27 +75,30 @@ extension StoreService {
         activeDescriptor.relationshipKeyPathsForPrefetching = [\.variants]
 
         Log.sync.info("saveProducts fetch_existing_active START \(ThreadInfo.current)")
-        let existingActive = (try? ActorTrace.contextOp("saveProducts-fetch-existing-active", context: modelContext) {
-            try modelContext.fetch(activeDescriptor)
-        }) ?? []
-        Log.sync.info("saveProducts fetch_existing_active END \(ThreadInfo.current) count=\(existingActive.count)")
+        let existingActive =
+            (try? ActorTrace.contextOp("saveProducts-fetch-existing-active", context: modelContext)
+            {
+                try modelContext.fetch(activeDescriptor)
+            }) ?? []
+        Log.sync.info(
+            "saveProducts fetch_existing_active END \(ThreadInfo.current) count=\(existingActive.count)"
+        )
 
         // BUG FIX: Also fetch removed products that re-appear in Shopify feed.
         // Without this, a product removed in a prior sync that reappears would cause
         // a duplicate Product insert (existingByShopifyId wouldn't contain it).
         var resurrectDescriptor = FetchDescriptor<Product>(
             predicate: #Predicate<Product> {
-                $0.store?.id == storeId &&
-                $0.isRemoved &&
-                fetchedIdSet.contains($0.shopifyId)
+                $0.store?.id == storeId && $0.isRemoved && fetchedIdSet.contains($0.shopifyId)
             }
         )
         resurrectDescriptor.relationshipKeyPathsForPrefetching = [\.variants]
 
         Log.sync.info("saveProducts fetch_resurrect_candidates START \(ThreadInfo.current)")
-        let resurrectCandidates = (try? ActorTrace.contextOp("saveProducts-fetch-resurrect", context: modelContext) {
-            try modelContext.fetch(resurrectDescriptor)
-        }) ?? []
+        let resurrectCandidates =
+            (try? ActorTrace.contextOp("saveProducts-fetch-resurrect", context: modelContext) {
+                try modelContext.fetch(resurrectDescriptor)
+            }) ?? []
         Log.sync.info(
             "saveProducts fetch_resurrect_candidates END \(ThreadInfo.current) count=\(resurrectCandidates.count)"
         )
@@ -114,7 +126,8 @@ extension StoreService {
                 // If it was previously removed, revive it instead of inserting a duplicate.
                 if existing.isRemoved { existing.isRemoved = false }
 
-                changes.append(contentsOf: detectChanges(existing: existing, fetched: shopifyProduct))
+                changes.append(
+                    contentsOf: detectChanges(existing: existing, fetched: shopifyProduct))
                 updateProduct(existing, from: shopifyProduct)
                 activeProducts.append(existing)
             } else {
@@ -123,23 +136,27 @@ extension StoreService {
                 modelContext.insert(product)
                 activeProducts.append(product)
 
-                changes.append(ChangeEvent(changeType: .newProduct, productTitle: shopifyProduct.title))
+                changes.append(
+                    ChangeEvent(changeType: .newProduct, productTitle: shopifyProduct.title))
             }
         }
-        Log.sync.info("saveProducts process_fetched END \(ThreadInfo.current) changes=\(changes.count)")
+        Log.sync.info(
+            "saveProducts process_fetched END \(ThreadInfo.current) changes=\(changes.count)")
 
         // Mark products removed: only consider the ones that were active going into the sync.
         Log.sync.info("saveProducts process_removed START \(ThreadInfo.current)")
         for existing in existingActive where !fetchedIdSet.contains(existing.shopifyId) {
             if !existing.isRemoved {
-                changes.append(ChangeEvent(changeType: .productRemoved, productTitle: existing.title))
+                changes.append(
+                    ChangeEvent(changeType: .productRemoved, productTitle: existing.title))
             }
             existing.isRemoved = true
         }
         Log.sync.info("saveProducts process_removed END \(ThreadInfo.current)")
 
         // Batch insert changes
-        Log.sync.info("saveProducts batch_insert START \(ThreadInfo.current) count=\(changes.count)")
+        Log.sync.info(
+            "saveProducts batch_insert START \(ThreadInfo.current) count=\(changes.count)")
         for change in changes {
             change.store = store
             modelContext.insert(change)
@@ -182,9 +199,13 @@ extension StoreService {
 
         // DIAG: Log thread before property access (N+1 faulting hot path)
         let beforeFaultThread = ThreadInfo.current.description
-        Log.sync.debug("detectChanges beforeFault variantCount=\(existing.variants.count) \(beforeFaultThread)")
+        Log.sync.debug(
+            "detectChanges beforeFault variantCount=\(existing.variants.count) \(beforeFaultThread)"
+        )
 
-        let existingVariants = Log.sync.span("build_variant_dict", meta: "count=\(existing.variants.count)") {
+        let existingVariants = Log.sync.span(
+            "build_variant_dict", meta: "count=\(existing.variants.count)"
+        ) {
             Dictionary(uniqueKeysWithValues: existing.variants.map { ($0.shopifyId, $0) })
         }
 
@@ -213,20 +234,22 @@ extension StoreService {
         var changes: [ChangeEvent] = []
 
         if existing.price != fetched.price {
-            changes.append(makePriceChangeEvent(
-                existing: existing,
-                fetched: fetched,
-                productTitle: productTitle
-            ))
+            changes.append(
+                makePriceChangeEvent(
+                    existing: existing,
+                    fetched: fetched,
+                    productTitle: productTitle
+                ))
         }
 
         if existing.available != fetched.available {
             // Don't pass store here - it will be set during batch insert
-            changes.append(ChangeEvent(
-                changeType: fetched.available ? .backInStock : .outOfStock,
-                productTitle: productTitle,
-                variantTitle: existing.title
-            ))
+            changes.append(
+                ChangeEvent(
+                    changeType: fetched.available ? .backInStock : .outOfStock,
+                    productTitle: productTitle,
+                    variantTitle: existing.title
+                ))
         }
 
         return changes
@@ -240,8 +263,10 @@ extension StoreService {
         let priceDrop = fetched.price < existing.price
         let oldPrice = existing.price as NSDecimalNumber
         let difference = abs((fetched.price - existing.price) as NSDecimalNumber as Decimal)
-        let percentChange = oldPrice.decimalValue != 0 ? (difference / oldPrice.decimalValue) * 100 : Decimal(0)
-        let magnitude: ChangeMagnitude = percentChange > 25 ? .large : percentChange > 10 ? .medium : .small
+        let percentChange =
+            oldPrice.decimalValue != 0 ? (difference / oldPrice.decimalValue) * 100 : Decimal(0)
+        let magnitude: ChangeMagnitude =
+            percentChange > 25 ? .large : percentChange > 10 ? .medium : .small
 
         // Don't pass store here - it will be set during batch insert
         return ChangeEvent(
@@ -258,16 +283,19 @@ extension StoreService {
     private func detectImageChanges(existing: Product, fetched: ShopifyProduct) -> [ChangeEvent] {
         let fetchedURLs = fetched.images.map { $0.src }
         guard existing.imageURLs != fetchedURLs else { return [] }
-        let oldCount = existing.imageURLs.count, newCount = fetchedURLs.count
+        let oldCount = existing.imageURLs.count
+        let newCount = fetchedURLs.count
         guard oldCount != newCount else { return [] }
 
         // Don't pass store here - it will be set during batch insert
-        return [ChangeEvent(
-            changeType: .imagesChanged,
-            productTitle: existing.title,
-            oldValue: "\(oldCount) images",
-            newValue: "\(newCount) images"
-        )]
+        return [
+            ChangeEvent(
+                changeType: .imagesChanged,
+                productTitle: existing.title,
+                oldValue: "\(oldCount) images",
+                newValue: "\(newCount) images"
+            )
+        ]
     }
 
     private func formatPrice(_ price: Decimal) -> String {
@@ -306,7 +334,6 @@ extension StoreService {
         return product
     }
 
-    // swiftlint:disable:next function_body_length
     private func updateProduct(_ product: Product, from shopify: ShopifyProduct) {
         let methodStart = entering("updateProduct")
         defer { exiting("updateProduct", start: methodStart) }
@@ -323,16 +350,19 @@ extension StoreService {
 
         // PERF: Same N+1 faulting issue as detectChanges() - see comment there.
         // Prefetching loads relationships but property access still triggers faulting.
-        let existingVariants = Log.sync.span("build_variant_dict_update", meta: "count=\(product.variants.count)") {
+        let existingVariants = Log.sync.span(
+            "build_variant_dict_update", meta: "count=\(product.variants.count)"
+        ) {
             Dictionary(uniqueKeysWithValues: product.variants.map { ($0.shopifyId, $0) })
         }
         let fetchedVariantIds = Set(shopify.variants.map { $0.id })
 
         for shopifyVariant in shopify.variants {
             if let existing = existingVariants[shopifyVariant.id] {
-                if existing.price != shopifyVariant.price ||
-                   existing.compareAtPrice != shopifyVariant.compareAtPrice ||
-                   existing.available != shopifyVariant.available {
+                if existing.price != shopifyVariant.price
+                    || existing.compareAtPrice != shopifyVariant.compareAtPrice
+                    || existing.available != shopifyVariant.available
+                {
                     let snapshot = VariantSnapshot(
                         price: existing.price,
                         compareAtPrice: existing.compareAtPrice,
@@ -350,8 +380,12 @@ extension StoreService {
                 if existing.compareAtPrice != shopifyVariant.compareAtPrice {
                     existing.compareAtPrice = shopifyVariant.compareAtPrice
                 }
-                if existing.available != shopifyVariant.available { existing.available = shopifyVariant.available }
-                if existing.position != shopifyVariant.position { existing.position = shopifyVariant.position }
+                if existing.available != shopifyVariant.available {
+                    existing.available = shopifyVariant.available
+                }
+                if existing.position != shopifyVariant.position {
+                    existing.position = shopifyVariant.position
+                }
             } else {
                 let variant = Variant(
                     shopifyId: shopifyVariant.id,

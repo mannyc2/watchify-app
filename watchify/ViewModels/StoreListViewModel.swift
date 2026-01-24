@@ -96,7 +96,8 @@ final class StoreListViewModel {
         stores = await storesTask
         unreadCount = await unreadTask
 
-        Log.ui.debug("StoreListViewModel: loaded \(self.stores.count) stores, \(self.unreadCount) unread")
+        Log.ui.debug(
+            "StoreListViewModel: loaded \(self.stores.count) stores, \(self.unreadCount) unread")
     }
 
     func refresh() async {
@@ -120,8 +121,9 @@ final class StoreListViewModel {
         let elapsed = CFAbsoluteTimeGetCurrent() - start
         let sinceLast = start - lastRefreshTime
         lastRefreshTime = start
-        // swiftlint:disable:next line_length
-        Log.ui.debug("StoreListVM: refresh \(elapsed, format: .fixed(precision: 3))s coalesced=\(coalescedCount) sinceLast=\(sinceLast, format: .fixed(precision: 1))s")
+        Log.ui.debug(
+            "StoreListVM: refresh \(elapsed, format: .fixed(precision: 3))s coalesced=\(coalescedCount) sinceLast=\(sinceLast, format: .fixed(precision: 1))s"
+        )
     }
 
     func deleteStore(id: UUID) async {

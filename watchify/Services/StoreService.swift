@@ -155,14 +155,16 @@ actor StoreService: ModelActor {
     func entering(_ method: StaticString) -> CFAbsoluteTime {
         methodDepth += 1
         let threadInfo = ThreadInfo.current
-        Log.sync.info(">>> \(method, privacy: .public) ENTER depth=\(self.methodDepth) \(threadInfo)")
+        Log.sync.info(
+            ">>> \(method, privacy: .public) ENTER depth=\(self.methodDepth) \(threadInfo)")
         return CFAbsoluteTimeGetCurrent()
     }
 
     func exiting(_ method: StaticString, start: CFAbsoluteTime) {
         let elapsed = CFAbsoluteTimeGetCurrent() - start
-        // swiftlint:disable:next line_length
-        Log.sync.info("<<< \(method, privacy: .public) EXIT depth=\(self.methodDepth) dt=\(elapsed, format: .fixed(precision: 4))s")
+        Log.sync.info(
+            "<<< \(method, privacy: .public) EXIT depth=\(self.methodDepth) dt=\(elapsed, format: .fixed(precision: 4))s"
+        )
         methodDepth -= 1
     }
 
@@ -180,7 +182,8 @@ actor StoreService: ModelActor {
         self.modelContainer = container
         self.api = api
 
-        Log.sync.info("StoreService.init isMainThread=\(Thread.isMainThread) thread=\(Thread.current)")
+        Log.sync.info(
+            "StoreService.init isMainThread=\(Thread.isMainThread) thread=\(Thread.current)")
     }
 
     /// Creates a StoreService that executes on a background thread.
@@ -224,7 +227,6 @@ actor StoreService: ModelActor {
 
     /// Syncs a store by its ID, returning DTOs for any changes detected.
     @discardableResult
-    // swiftlint:disable:next function_body_length
     func syncStore(storeId: UUID) async throws -> [ChangeEventDTO] {
         let methodStart = entering("syncStore")
         defer { exiting("syncStore", start: methodStart) }
@@ -274,13 +276,18 @@ actor StoreService: ModelActor {
         Log.sync.info("syncStore API_START \(ThreadInfo.current)")
         let shopifyProducts = try await api.fetchProducts(domain: store.domain)
         let apiFetchTime = CFAbsoluteTimeGetCurrent() - fetchStart
-        Log.sync.info("syncStore API_END \(ThreadInfo.current) dt=\(apiFetchTime)s count=\(shopifyProducts.count)")
+        Log.sync.info(
+            "syncStore API_END \(ThreadInfo.current) dt=\(apiFetchTime)s count=\(shopifyProducts.count)"
+        )
 
         let saveProductsStart = CFAbsoluteTimeGetCurrent()
         let result = await saveProducts(shopifyProducts, to: store, isInitialImport: false)
         let saveTime = CFAbsoluteTimeGetCurrent() - saveProductsStart
-        let changeCount = result.changes.count, productCount = result.activeProducts.count
-        Log.sync.info("syncStore saveProducts dt=\(saveTime)s changes=\(changeCount) activeProducts=\(productCount)")
+        let changeCount = result.changes.count
+        let productCount = result.activeProducts.count
+        Log.sync.info(
+            "syncStore saveProducts dt=\(saveTime)s changes=\(changeCount) activeProducts=\(productCount)"
+        )
 
         let cacheStart = CFAbsoluteTimeGetCurrent()
         store.lastFetchedAt = Date()
@@ -329,7 +336,8 @@ actor StoreService: ModelActor {
             if UserDefaults.standard.bool(forKey: "autoDeleteEvents") {
                 let days = UserDefaults.standard.integer(forKey: "eventRetentionDays")
                 if days > 0,
-                   let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: Date()) {
+                    let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: Date())
+                {
                     let predicate = #Predicate<ChangeEvent> { $0.occurredAt < cutoff }
                     _ = try? ActorTrace.contextOp("delete-old-events", context: modelContext) {
                         try modelContext.delete(model: ChangeEvent.self, where: predicate)
@@ -341,7 +349,8 @@ actor StoreService: ModelActor {
             if UserDefaults.standard.bool(forKey: "autoDeleteSnapshots") {
                 let days = UserDefaults.standard.integer(forKey: "snapshotRetentionDays")
                 if days > 0,
-                   let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: Date()) {
+                    let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: Date())
+                {
                     _ = try? ActorTrace.contextOp("delete-old-snapshots", context: modelContext) {
                         try deleteOldSnapshots(olderThan: cutoff)
                     }

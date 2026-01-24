@@ -5,26 +5,25 @@ All notable changes to Watchify. Format based on [Keep a Changelog](https://keep
 ## 2026-01-24
 
 ### Added
-- Page object pattern for UI tests with helper screens (`SidebarScreen`, `StoreDetailScreen`, `AddStoreScreen`, `SettingsScreen`, `AppScreen`)
-- New UI test files: `SyncTests`, `NavigationTests`, `AddStoreTests`, `DeleteStoreTests`, `SettingsTests`, `ErrorStateTests`
-- `StoreService+TestData.swift`: extracted test data seeding to separate file with `seedTestDataIfNeeded()`
-- Accessibility identifiers: `SidebarItem-Overview`, `SidebarItem-Activity`, `StoreRow-{name}`, `AddStoreButton`, `AddStoreError`
+- Page object pattern for UI tests (`SidebarScreen`, `StoreDetailScreen`, `AddStoreScreen`, `SettingsScreen`)
+- UI test files: `SyncTests`, `NavigationTests`, `AddStoreTests`, `DeleteStoreTests`, `SettingsTests`, `ErrorStateTests`
+- Accessibility identifiers for UI testing
+- `Helpers/Tags.swift` consolidating all test tag definitions
 
 ### Fixed
-- Sync button toolbar placement: moved from `.navigation` (leading) to `.primaryAction` (trailing) per Apple HIG
-- Add Store button moved from inside `List` section to `safeAreaInset(edge: .bottom)` for consistent visibility
-- `NavigationStack` in detail view now uses `.id(id)` to force view recreation on store selection change
-- `AppCommands`: Add Store now uses `CommandGroup(replacing: .newItem)` instead of `after:` to replace default New Window
+- Sync button toolbar placement: `.navigation` → `.primaryAction` per HIG
+- Add Store button moved to `safeAreaInset(edge: .bottom)` for consistent visibility
+- `NavigationStack` uses `.id(id)` to force view recreation on selection change
+- `SaveProductsResult` Swift 6 strict concurrency with `nonisolated(unsafe)` markers
 
 ### Changed
-- `AccessibilityAuditTests` refactored to use page object pattern with better issue logging via `XCTContext.runActivity`
-- Test data seeding: simplified to single `-UITesting` flag (removed `-SeedTestData`), calls `seedTestDataIfNeeded()`
-- `AddStoreSheet`: removed redundant `.accessibilityElement(children: .contain)` wrapper
-- `StoreRow`: added explicit `.accessibilityLabel(store.name)` for VoiceOver
+- Unit tests reorganized into nested Swift Testing suites (`StoreService/`, `NotificationService/`, `Models/`, `Errors/`)
+- UI tests refactored to page object pattern with `XCTContext.runActivity` logging
+- Test data seeding simplified to `-UITesting` flag with `seedTestDataIfNeeded()`
+- Removed swiftlint disable comments (fixed underlying formatting)
 
 ### Removed
-- `watchifyUITests.swift` and `watchifyUITestsLaunchTests.swift` (replaced by focused test files)
-- `seedTestData()` from main `StoreService.swift` (moved to extension)
+- `watchifyUITests.swift`, `watchifyUITestsLaunchTests.swift` (replaced by focused test files)
 
 ---
 
@@ -169,4 +168,4 @@ All notable changes to Watchify. Format based on [Keep a Changelog](https://keep
 | 2026-01-21 | Liquid Glass design system |
 | 2026-01-22 | Concurrency fixes, ViewModels, snapshot cleanup, error handling, accessibility |
 | 2026-01-23 | Sync performance, Nuke image loading (326ms hangs → 0ms) |
-| 2026-01-24 | UI test infrastructure (page objects), HIG toolbar fix, accessibility identifiers |
+| 2026-01-24 | UI test infrastructure, test suite reorganization, Swift 6 concurrency fixes |

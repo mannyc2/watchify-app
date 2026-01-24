@@ -1,11 +1,47 @@
 //
-//  NotificationTestHelpers.swift
+//  TestAssertions.swift
 //  watchifyTests
 //
 
 import Foundation
+import SwiftData
+import Testing
 import UserNotifications
 @testable import watchify
+
+// MARK: - Event Assertion Helpers
+
+@MainActor
+func fetchEvents(from context: ModelContext) throws -> [ChangeEvent] {
+    let descriptor = FetchDescriptor<ChangeEvent>(
+        sortBy: [SortDescriptor(\.occurredAt, order: .reverse)]
+    )
+    return try context.fetch(descriptor)
+}
+
+@MainActor
+func expectEventCount(
+    _ count: Int,
+    in context: ModelContext,
+    sourceLocation: SourceLocation = #_sourceLocation
+) throws {
+    let events = try fetchEvents(from: context)
+    #expect(events.count == count, sourceLocation: sourceLocation)
+}
+
+@MainActor
+func expectEvent(
+    type: ChangeType,
+    count: Int = 1,
+    in context: ModelContext,
+    sourceLocation: SourceLocation = #_sourceLocation
+) throws {
+    let events = try fetchEvents(from: context)
+    let matching = events.filter { $0.changeType == type }
+    #expect(matching.count == count, sourceLocation: sourceLocation)
+}
+
+// MARK: - Fake Notification Center
 
 final class FakeNotificationCenter: NotificationCenterProtocol {
     private(set) var addedRequests: [UNNotificationRequest] = []
@@ -31,6 +67,8 @@ final class FakeNotificationCenter: NotificationCenterProtocol {
         addedRequests.append(request)
     }
 }
+
+// MARK: - Notification Test Helpers
 
 @MainActor
 func withNotificationDefaults<T>(

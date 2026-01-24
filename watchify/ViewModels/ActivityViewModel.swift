@@ -166,7 +166,8 @@ final class ActivityViewModel {
         var parts: [String] = []
 
         if let storeId = selectedStoreId,
-           let store = stores.first(where: { $0.id == storeId }) {
+            let store = stores.first(where: { $0.id == storeId })
+        {
             parts.append(store.name)
         }
 
@@ -220,8 +221,9 @@ final class ActivityViewModel {
         let totalTime = CFAbsoluteTimeGetCurrent() - start
         let eventCount = events.count
         let itemCount = items.count
-        // swiftlint:disable:next line_length
-        Log.ui.info("rebuildListItems: events=\(eventCount) items=\(itemCount) total=\(totalTime)s group=\(groupTime)s sort=\(sortTime)s flatten=\(flattenTime)s")
+        Log.ui.info(
+            "rebuildListItems: events=\(eventCount) items=\(itemCount) total=\(totalTime)s group=\(groupTime)s sort=\(sortTime)s flatten=\(flattenTime)s"
+        )
     }
 
     private func sectionTitle(for date: Date, calendar: Calendar) -> String {
@@ -271,7 +273,8 @@ final class ActivityViewModel {
             events.append(contentsOf: fetched)
         }
 
-        Log.db.debug("fetchEventsInternal: reset=\(reset) fetched=\(fetched.count) time=\(fetchTime)s")
+        Log.db.debug(
+            "fetchEventsInternal: reset=\(reset) fetched=\(fetched.count) time=\(fetchTime)s")
 
         currentOffset += fetched.count
         hasMore = fetched.count == pageSize

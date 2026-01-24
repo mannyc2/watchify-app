@@ -3,8 +3,6 @@
 //  watchify
 //
 
-// swiftlint:disable file_length
-
 import Foundation
 import OSLog
 import SwiftData
@@ -26,7 +24,8 @@ extension StoreService {
 
         let start = CFAbsoluteTimeGetCurrent()
 
-        let predicate = buildEventPredicate(storeId: storeId, changeTypes: changeTypes, startDate: startDate)
+        let predicate = buildEventPredicate(
+            storeId: storeId, changeTypes: changeTypes, startDate: startDate)
         var descriptor = FetchDescriptor<ChangeEvent>(
             predicate: predicate,
             sortBy: [SortDescriptor(\.occurredAt, order: .reverse)]
@@ -41,7 +40,8 @@ extension StoreService {
             let dtos = events.map { ChangeEventDTO(from: $0) }
 
             let fetchTime = CFAbsoluteTimeGetCurrent() - start
-            Log.db.debug("fetchActivityEvents: \(dtos.count) events, offset=\(offset), time=\(fetchTime)s")
+            Log.db.debug(
+                "fetchActivityEvents: \(dtos.count) events, offset=\(offset), time=\(fetchTime)s")
             return dtos
         } catch {
             Log.db.error("fetchActivityEvents error: \(error)")
@@ -198,7 +198,8 @@ extension StoreService {
         let methodStart = entering("markAllEventsRead")
         defer { exiting("markAllEventsRead", start: methodStart) }
 
-        let predicate = buildEventPredicate(storeId: storeId, changeTypes: changeTypes, startDate: startDate)
+        let predicate = buildEventPredicate(
+            storeId: storeId, changeTypes: changeTypes, startDate: startDate)
         let descriptor = FetchDescriptor<ChangeEvent>(predicate: predicate)
 
         do {
@@ -238,7 +239,9 @@ extension StoreService {
         unreadDescriptor.fetchLimit = limit
 
         do {
-            let unreadEvents = try ActorTrace.contextOp("fetch-menubar-unread", context: modelContext) {
+            let unreadEvents = try ActorTrace.contextOp(
+                "fetch-menubar-unread", context: modelContext
+            ) {
                 try modelContext.fetch(unreadDescriptor)
             }
 
@@ -253,7 +256,9 @@ extension StoreService {
             )
             recentDescriptor.fetchLimit = limit
 
-            let recentEvents = try ActorTrace.contextOp("fetch-menubar-recent", context: modelContext) {
+            let recentEvents = try ActorTrace.contextOp(
+                "fetch-menubar-recent", context: modelContext
+            ) {
                 try modelContext.fetch(recentDescriptor)
             }
             let dtos = recentEvents.map { ChangeEventDTO(from: $0) }
@@ -333,7 +338,7 @@ extension StoreService {
     // MARK: - Products
 
     /// Fetches products for a store with filtering and sorting done in the database.
-    func fetchProducts( // swiftlint:disable:this function_parameter_count
+    func fetchProducts(
         storeId: UUID,
         searchText: String,
         stockScope: StockScope,
@@ -349,7 +354,8 @@ extension StoreService {
 
         do {
             // Build predicate based on filters
-            let predicate = buildProductPredicate(storeId: storeId, query: query, stockScope: stockScope)
+            let predicate = buildProductPredicate(
+                storeId: storeId, query: query, stockScope: stockScope)
             let sortDescriptors = buildProductSortDescriptors(sortOrder: sortOrder)
 
             var descriptor = FetchDescriptor<Product>(predicate: predicate, sortBy: sortDescriptors)
@@ -362,7 +368,8 @@ extension StoreService {
             let dtos = products.map { ProductDTO(from: $0) }
 
             let fetchTime = CFAbsoluteTimeGetCurrent() - start
-            Log.db.debug("fetchProducts: \(dtos.count) products, offset=\(offset), time=\(fetchTime)s")
+            Log.db.debug(
+                "fetchProducts: \(dtos.count) products, offset=\(offset), time=\(fetchTime)s")
             return dtos
         } catch {
             Log.db.error("fetchProducts error: \(error)")
@@ -376,7 +383,8 @@ extension StoreService {
         defer { exiting("fetchProductCount", start: methodStart) }
 
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let predicate = buildProductPredicate(storeId: storeId, query: query, stockScope: stockScope)
+        let predicate = buildProductPredicate(
+            storeId: storeId, query: query, stockScope: stockScope)
         let descriptor = FetchDescriptor<Product>(predicate: predicate)
 
         do {
@@ -412,7 +420,9 @@ extension StoreService {
         }
     }
 
-    private func buildProductPredicate(storeId: UUID, query: String, stockScope: StockScope) -> Predicate<Product> {
+    private func buildProductPredicate(storeId: UUID, query: String, stockScope: StockScope)
+        -> Predicate<Product>
+    {
         switch (query.isEmpty, stockScope) {
         case (true, .all):
             return #Predicate<Product> { product in
@@ -428,18 +438,18 @@ extension StoreService {
             }
         case (false, .all):
             return #Predicate<Product> { product in
-                product.store?.id == storeId && !product.isRemoved &&
-                product.titleSearchKey.contains(query)
+                product.store?.id == storeId && !product.isRemoved
+                    && product.titleSearchKey.contains(query)
             }
         case (false, .inStock):
             return #Predicate<Product> { product in
-                product.store?.id == storeId && !product.isRemoved &&
-                product.titleSearchKey.contains(query) && product.cachedIsAvailable
+                product.store?.id == storeId && !product.isRemoved
+                    && product.titleSearchKey.contains(query) && product.cachedIsAvailable
             }
         case (false, .outOfStock):
             return #Predicate<Product> { product in
-                product.store?.id == storeId && !product.isRemoved &&
-                product.titleSearchKey.contains(query) && !product.cachedIsAvailable
+                product.store?.id == storeId && !product.isRemoved
+                    && product.titleSearchKey.contains(query) && !product.cachedIsAvailable
             }
         }
     }
@@ -461,7 +471,7 @@ extension StoreService {
 
     /// Builds a predicate for ChangeEvent filtering. Handles all combinations of filters.
     /// Switch handles 18 cases (3 optional filters × 2 states each) - complexity is inherent.
-    private func buildEventPredicate( // swiftlint:disable:this cyclomatic_complexity function_body_length
+    private func buildEventPredicate(
         storeId: UUID?,
         changeTypes: [ChangeType]?,
         startDate: Date?
@@ -500,7 +510,8 @@ extension StoreService {
             }
         case (nil, .price, let date?):
             return #Predicate<ChangeEvent> {
-                $0.occurredAt >= date && ($0.changeType == priceDropped || $0.changeType == priceIncreased)
+                $0.occurredAt >= date
+                    && ($0.changeType == priceDropped || $0.changeType == priceIncreased)
             }
         case (nil, .stock, nil):
             return #Predicate<ChangeEvent> {
@@ -508,7 +519,8 @@ extension StoreService {
             }
         case (nil, .stock, let date?):
             return #Predicate<ChangeEvent> {
-                $0.occurredAt >= date && ($0.changeType == backInStock || $0.changeType == outOfStock)
+                $0.occurredAt >= date
+                    && ($0.changeType == backInStock || $0.changeType == outOfStock)
             }
         case (nil, .product, nil):
             return #Predicate<ChangeEvent> {
@@ -516,7 +528,8 @@ extension StoreService {
             }
         case (nil, .product, let date?):
             return #Predicate<ChangeEvent> {
-                $0.occurredAt >= date && ($0.changeType == newProduct || $0.changeType == productRemoved)
+                $0.occurredAt >= date
+                    && ($0.changeType == newProduct || $0.changeType == productRemoved)
             }
 
         // With store filter
@@ -526,12 +539,13 @@ extension StoreService {
             return #Predicate<ChangeEvent> { $0.store?.id == id && $0.occurredAt >= date }
         case (let id?, .price, nil):
             return #Predicate<ChangeEvent> {
-                $0.store?.id == id && ($0.changeType == priceDropped || $0.changeType == priceIncreased)
+                $0.store?.id == id
+                    && ($0.changeType == priceDropped || $0.changeType == priceIncreased)
             }
         case (let id?, .price, let date?):
             return #Predicate<ChangeEvent> {
-                $0.store?.id == id && $0.occurredAt >= date &&
-                ($0.changeType == priceDropped || $0.changeType == priceIncreased)
+                $0.store?.id == id && $0.occurredAt >= date
+                    && ($0.changeType == priceDropped || $0.changeType == priceIncreased)
             }
         case (let id?, .stock, nil):
             return #Predicate<ChangeEvent> {
@@ -539,17 +553,18 @@ extension StoreService {
             }
         case (let id?, .stock, let date?):
             return #Predicate<ChangeEvent> {
-                $0.store?.id == id && $0.occurredAt >= date &&
-                ($0.changeType == backInStock || $0.changeType == outOfStock)
+                $0.store?.id == id && $0.occurredAt >= date
+                    && ($0.changeType == backInStock || $0.changeType == outOfStock)
             }
         case (let id?, .product, nil):
             return #Predicate<ChangeEvent> {
-                $0.store?.id == id && ($0.changeType == newProduct || $0.changeType == productRemoved)
+                $0.store?.id == id
+                    && ($0.changeType == newProduct || $0.changeType == productRemoved)
             }
         case (let id?, .product, let date?):
             return #Predicate<ChangeEvent> {
-                $0.store?.id == id && $0.occurredAt >= date &&
-                ($0.changeType == newProduct || $0.changeType == productRemoved)
+                $0.store?.id == id && $0.occurredAt >= date
+                    && ($0.changeType == newProduct || $0.changeType == productRemoved)
             }
         }
     }
