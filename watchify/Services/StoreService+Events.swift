@@ -42,7 +42,16 @@ extension StoreService {
 
         do {
             let events = try modelContext.fetch(descriptor)
-            return events.map { ChangeEventDTO(from: $0) }
+
+            // Batch-fetch product images to avoid N+1 queries
+            let imageURLs = batchFetchProductImageURLs(for: events)
+
+            return events.map { event in
+                ChangeEventDTO(
+                    from: event,
+                    productImageURL: event.productShopifyId.flatMap { imageURLs[$0] }
+                )
+            }
         } catch {
             Log.db.error("fetchActivityEvents error: \(error)")
             return []
@@ -178,7 +187,13 @@ extension StoreService {
             let unreadEvents = try modelContext.fetch(unreadDescriptor)
 
             if !unreadEvents.isEmpty {
-                return unreadEvents.map { ChangeEventDTO(from: $0) }
+                let imageURLs = batchFetchProductImageURLs(for: unreadEvents)
+                return unreadEvents.map { event in
+                    ChangeEventDTO(
+                        from: event,
+                        productImageURL: event.productShopifyId.flatMap { imageURLs[$0] }
+                    )
+                }
             }
 
             var recentDescriptor = FetchDescriptor<ChangeEvent>(
@@ -187,7 +202,13 @@ extension StoreService {
             recentDescriptor.fetchLimit = limit
 
             let recentEvents = try modelContext.fetch(recentDescriptor)
-            return recentEvents.map { ChangeEventDTO(from: $0) }
+            let imageURLs = batchFetchProductImageURLs(for: recentEvents)
+            return recentEvents.map { event in
+                ChangeEventDTO(
+                    from: event,
+                    productImageURL: event.productShopifyId.flatMap { imageURLs[$0] }
+                )
+            }
         } catch {
             Log.db.error("MenuBar fetch error: \(error)")
             return []
@@ -315,11 +336,32 @@ extension StoreService {
         case .priceHighLow:
             return [SortDescriptor(\.cachedPrice, order: .reverse)]
         case .recentlyAdded:
-            return [SortDescriptor(\.firstSeenAt, order: .reverse)]
+            // Sort by Shopify's published date, falling back to firstSeenAt if nil
+            return [SortDescriptor(\.shopifyPublishedAt, order: .reverse)]
         }
     }
 
     // MARK: - Private Helpers
+
+    /// Batch-fetches product image URLs for a list of events.
+    /// Returns a dictionary mapping shopifyId to the primary image URL string.
+    private func batchFetchProductImageURLs(for events: [ChangeEvent]) -> [Int64: String] {
+        let shopifyIds = events.compactMap(\.productShopifyId)
+        guard !shopifyIds.isEmpty else { return [:] }
+
+        let idSet = Set(shopifyIds)
+        let productPredicate = #Predicate<Product> { idSet.contains($0.shopifyId) }
+        let productDescriptor = FetchDescriptor<Product>(predicate: productPredicate)
+
+        guard let products = try? modelContext.fetch(productDescriptor) else { return [:] }
+
+        return Dictionary(uniqueKeysWithValues:
+            products.compactMap { product -> (Int64, String)? in
+                guard let url = product.imageURLs.first else { return nil }
+                return (product.shopifyId, url)
+            }
+        )
+    }
 
     /// Builds a predicate for ChangeEvent filtering.
     /// Returns nil when no filters are set (fast path for fetch-all).

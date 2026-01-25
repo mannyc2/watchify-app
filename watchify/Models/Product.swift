@@ -15,7 +15,8 @@ final class Product {
         [\.store, \.isRemoved],
         [\.store, \.cachedIsAvailable],
         [\.store, \.cachedPrice],
-        [\.store, \.titleSearchKey]
+        [\.store, \.titleSearchKey],
+        [\.store, \.shopifyPublishedAt]
     )
 
     @Attribute(.unique) var shopifyId: Int64
@@ -25,6 +26,11 @@ final class Product {
     var productType: String?
     var firstSeenAt: Date
     var isRemoved: Bool
+
+    // Shopify timestamps (from /products.json)
+    var shopifyCreatedAt: Date?
+    var shopifyPublishedAt: Date?
+    var shopifyUpdatedAt: Date?
 
     var store: Store?
 
@@ -55,7 +61,10 @@ final class Product {
         vendor: String? = nil,
         productType: String? = nil,
         firstSeenAt: Date = Date(),
-        isRemoved: Bool = false
+        isRemoved: Bool = false,
+        shopifyCreatedAt: Date? = nil,
+        shopifyPublishedAt: Date? = nil,
+        shopifyUpdatedAt: Date? = nil
     ) {
         self.shopifyId = shopifyId
         self.handle = handle
@@ -64,6 +73,9 @@ final class Product {
         self.productType = productType
         self.firstSeenAt = firstSeenAt
         self.isRemoved = isRemoved
+        self.shopifyCreatedAt = shopifyCreatedAt
+        self.shopifyPublishedAt = shopifyPublishedAt
+        self.shopifyUpdatedAt = shopifyUpdatedAt
         self.titleSearchKey = Self.makeSearchKey(title)
     }
 

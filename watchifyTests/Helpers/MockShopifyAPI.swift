@@ -37,6 +37,9 @@ extension ShopifyProduct {
         handle: String = "test-product",
         vendor: String? = "Test Vendor",
         productType: String? = "Test Type",
+        createdAt: Date? = nil,
+        publishedAt: Date? = nil,
+        updatedAt: Date? = nil,
         variants: [ShopifyVariant] = [.mock()],
         images: [ShopifyImage] = []
     ) -> ShopifyProduct {
@@ -46,6 +49,9 @@ extension ShopifyProduct {
             handle: handle,
             vendor: vendor,
             productType: productType,
+            createdAt: createdAt,
+            publishedAt: publishedAt,
+            updatedAt: updatedAt,
             images: images,
             variants: variants
         )

@@ -117,7 +117,11 @@ private struct ActivityContentView: View {
                                 item: item,
                                 lastEventId: viewModel.lastEventId,
                                 hasMore: viewModel.hasMore,
+                                displayMode: viewModel.groupDisplayMode,
+                                isGroupExpanded: { viewModel.isGroupExpanded($0) },
+                                onToggleGroup: { viewModel.toggleGroupExpanded($0) },
                                 onMarkRead: { viewModel.markEventRead(id: $0) },
+                                onMarkGroupRead: { viewModel.markGroupRead(group: $0) },
                                 onLoadMore: { Task { await viewModel.fetchEvents(reset: false) } }
                             )
                         }
@@ -207,7 +211,11 @@ private struct ActivityListItemView: View {
     let item: ActivityListItem
     let lastEventId: UUID?
     let hasMore: Bool
+    let displayMode: EventGroupDisplayMode
+    let isGroupExpanded: (UUID) -> Bool
+    let onToggleGroup: (UUID) -> Void
     let onMarkRead: (UUID) -> Void
+    let onMarkGroupRead: (EventGroup) -> Void
     let onLoadMore: () -> Void
 
     var body: some View {
@@ -239,6 +247,49 @@ private struct ActivityListItemView: View {
                         .padding(.leading, 52)
                 }
             }
+
+        case .group(let group, let showDivider):
+            VStack(spacing: 0) {
+                groupRow(for: group)
+                    .onAppear {
+                        // Trigger load more if this is the last group
+                        if let lastId = lastEventId,
+                           group.events.contains(where: { $0.id == lastId }) && hasMore {
+                            onLoadMore()
+                        }
+                    }
+
+                if showDivider {
+                    Divider()
+                        .padding(.leading, 52)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func groupRow(for group: EventGroup) -> some View {
+        switch displayMode {
+        case .collapsible:
+            CollapsibleGroupRow(
+                group: group,
+                isExpanded: isGroupExpanded(group.id),
+                onToggle: { onToggleGroup(group.id) },
+                onMarkRead: onMarkRead
+            )
+
+        case .summary:
+            SummaryGroupRow(group: group) {
+                onMarkGroupRead(group)
+            }
+
+        case .inline:
+            InlineExpandableGroupRow(
+                group: group,
+                isExpanded: isGroupExpanded(group.id),
+                onToggle: { onToggleGroup(group.id) },
+                onMarkRead: onMarkRead
+            )
         }
     }
 }
@@ -312,6 +363,62 @@ private struct ActivityListItemView: View {
     )
     event3.occurredAt = Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date()
     container.mainContext.insert(event3)
+
+    return NavigationStack {
+        ActivityView()
+    }
+    .modelContainer(container)
+}
+
+#Preview("With Grouped Events") {
+    let container = makePreviewContainer()
+
+    let store = Store(name: "Allbirds", domain: "allbirds.com")
+    container.mainContext.insert(store)
+
+    // Create multiple events for the same product (will be grouped)
+    let now = Date()
+    let productId: Int64 = 123456789
+
+    for (index, variant) in ["Size 8", "Size 9", "Size 10", "Size 11"].enumerated() {
+        let event = ChangeEvent(
+            changeType: .priceDropped,
+            productTitle: "Wool Runners",
+            variantTitle: variant,
+            oldValue: "$110",
+            newValue: "$89",
+            priceChange: -21,
+            productShopifyId: productId,
+            store: store
+        )
+        // All within 5 minutes of each other
+        event.occurredAt = now.addingTimeInterval(TimeInterval(-index * 30))
+        container.mainContext.insert(event)
+    }
+
+    // Another group of stock events
+    for (index, variant) in ["Size 7 / Grey", "Size 8 / Grey"].enumerated() {
+        let event = ChangeEvent(
+            changeType: .backInStock,
+            productTitle: "Tree Dashers",
+            variantTitle: variant,
+            productShopifyId: 234567890,
+            store: store
+        )
+        event.occurredAt = now.addingTimeInterval(TimeInterval(-600 - index * 30))
+        container.mainContext.insert(event)
+    }
+
+    // A single event (won't be grouped)
+    let singleEvent = ChangeEvent(
+        changeType: .newProduct,
+        productTitle: "SuperLight Runners",
+        newValue: "$98",
+        productShopifyId: 345678901,
+        store: store
+    )
+    singleEvent.occurredAt = now.addingTimeInterval(-3600)
+    container.mainContext.insert(singleEvent)
 
     return NavigationStack {
         ActivityView()

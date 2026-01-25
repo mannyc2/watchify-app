@@ -133,7 +133,11 @@ extension StoreService {
                 product.store = store
                 modelContext.insert(product)
                 activeProducts.append(product)
-                changes.append(ChangeEvent(changeType: .newProduct, productTitle: shopifyProduct.title))
+                changes.append(ChangeEvent(
+                    changeType: .newProduct,
+                    productTitle: shopifyProduct.title,
+                    productShopifyId: shopifyProduct.id
+                ))
             }
         }
         return (activeProducts, changes)
@@ -170,7 +174,8 @@ extension StoreService {
             changes += detectVariantChanges(
                 existing: existingVariant,
                 fetched: fetchedVariant,
-                productTitle: existing.title
+                productTitle: existing.title,
+                productShopifyId: existing.shopifyId
             )
         }
 
@@ -181,17 +186,18 @@ extension StoreService {
     private func detectVariantChanges(
         existing: Variant,
         fetched: ShopifyVariant,
-        productTitle: String
+        productTitle: String,
+        productShopifyId: Int64
     ) -> [ChangeEvent] {
         var changes: [ChangeEvent] = []
 
         if existing.price != fetched.price {
-            changes.append(
-                makePriceChangeEvent(
-                    existing: existing,
-                    fetched: fetched,
-                    productTitle: productTitle
-                ))
+            changes.append(makePriceChangeEvent(
+                existing: existing,
+                fetched: fetched,
+                productTitle: productTitle,
+                productShopifyId: productShopifyId
+            ))
         }
 
         if existing.available != fetched.available {
@@ -200,7 +206,8 @@ extension StoreService {
                 ChangeEvent(
                     changeType: fetched.available ? .backInStock : .outOfStock,
                     productTitle: productTitle,
-                    variantTitle: existing.title
+                    variantTitle: existing.title,
+                    productShopifyId: productShopifyId
                 ))
         }
 
@@ -210,7 +217,8 @@ extension StoreService {
     private func makePriceChangeEvent(
         existing: Variant,
         fetched: ShopifyVariant,
-        productTitle: String
+        productTitle: String,
+        productShopifyId: Int64
     ) -> ChangeEvent {
         let priceDrop = fetched.price < existing.price
         let oldPrice = existing.price as NSDecimalNumber
@@ -228,11 +236,15 @@ extension StoreService {
             oldValue: formatPrice(existing.price),
             newValue: formatPrice(fetched.price),
             priceChange: fetched.price - existing.price,
-            magnitude: magnitude
+            magnitude: magnitude,
+            productShopifyId: productShopifyId
         )
     }
 
-    private func detectImageChanges(existing: Product, fetched: ShopifyProduct) -> [ChangeEvent] {
+    private func detectImageChanges(
+        existing: Product,
+        fetched: ShopifyProduct
+    ) -> [ChangeEvent] {
         let fetchedURLs = fetched.images.map { $0.src }
         guard existing.imageURLs != fetchedURLs else { return [] }
         let oldCount = existing.imageURLs.count
@@ -245,7 +257,8 @@ extension StoreService {
                 changeType: .imagesChanged,
                 productTitle: existing.title,
                 oldValue: "\(oldCount) images",
-                newValue: "\(newCount) images"
+                newValue: "\(newCount) images",
+                productShopifyId: existing.shopifyId
             )
         ]
     }
@@ -260,7 +273,10 @@ extension StoreService {
             handle: shopify.handle,
             title: shopify.title,
             vendor: shopify.vendor,
-            productType: shopify.productType
+            productType: shopify.productType,
+            shopifyCreatedAt: shopify.createdAt,
+            shopifyPublishedAt: shopify.publishedAt,
+            shopifyUpdatedAt: shopify.updatedAt
         )
 
         product.imageURLs = shopify.images.map { $0.src }
@@ -319,6 +335,11 @@ extension StoreService {
 
         let newImageURLs = shopify.images.map { $0.src }
         if product.imageURLs != newImageURLs { product.imageURLs = newImageURLs }
+
+        // Update Shopify timestamps (updatedAt changes frequently; others rarely change)
+        if product.shopifyUpdatedAt != shopify.updatedAt { product.shopifyUpdatedAt = shopify.updatedAt }
+        if product.shopifyCreatedAt != shopify.createdAt { product.shopifyCreatedAt = shopify.createdAt }
+        if product.shopifyPublishedAt != shopify.publishedAt { product.shopifyPublishedAt = shopify.publishedAt }
     }
 
     /// Updates an existing variant, creating a snapshot if price/availability changed.

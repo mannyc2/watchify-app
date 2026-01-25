@@ -119,18 +119,14 @@ struct MenuBarEventRowDTO: View {
 #Preview("Price Dropped") {
     MenuBarEventRowDTO(
         event: ChangeEventDTO(
-            id: UUID(),
-            occurredAt: Date(),
             changeType: .priceDropped,
             productTitle: "Wool Runners",
             variantTitle: "Size 10 / Natural White",
             oldValue: "$110",
             newValue: "$89",
             priceChange: -21,
-            isRead: false,
             magnitude: .medium,
-            storeId: nil,
-            storeName: nil
+            productShopifyId: 123456789
         ),
         onAppear: {}
     )
@@ -141,18 +137,11 @@ struct MenuBarEventRowDTO: View {
 #Preview("Back In Stock") {
     MenuBarEventRowDTO(
         event: ChangeEventDTO(
-            id: UUID(),
-            occurredAt: Date(),
             changeType: .backInStock,
             productTitle: "Tree Dashers",
             variantTitle: "Size 9 / Thunder",
-            oldValue: nil,
-            newValue: nil,
-            priceChange: nil,
-            isRead: false,
             magnitude: .medium,
-            storeId: nil,
-            storeName: nil
+            productShopifyId: 234567890
         ),
         onAppear: {}
     )
@@ -163,18 +152,13 @@ struct MenuBarEventRowDTO: View {
 #Preview("Read Event") {
     MenuBarEventRowDTO(
         event: ChangeEventDTO(
-            id: UUID(),
-            occurredAt: Date(),
             changeType: .priceDropped,
             productTitle: "Wool Loungers",
-            variantTitle: nil,
-            oldValue: nil,
             newValue: "$79",
             priceChange: -16,
-            isRead: true,
             magnitude: .medium,
-            storeId: nil,
-            storeName: nil
+            productShopifyId: 345678901,
+            isRead: true
         ),
         onAppear: {}
     )

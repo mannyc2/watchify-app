@@ -17,6 +17,9 @@ final class ChangeEvent {
     var priceChange: Decimal?
     var isRead: Bool
 
+    /// Shopify product ID for navigation. Nil for removed products.
+    var productShopifyId: Int64?
+
     var store: Store?
 
     // MARK: - Raw Value Storage (for SwiftData predicate filtering)
@@ -45,6 +48,7 @@ final class ChangeEvent {
         newValue: String? = nil,
         priceChange: Decimal? = nil,
         magnitude: ChangeMagnitude = .medium,
+        productShopifyId: Int64? = nil,
         store: Store? = nil
     ) {
         self.id = UUID()
@@ -57,6 +61,7 @@ final class ChangeEvent {
         self.priceChange = priceChange
         self.isRead = false
         self.magnitudeRaw = magnitude.rawValue
+        self.productShopifyId = productShopifyId
         self.store = store
     }
 }

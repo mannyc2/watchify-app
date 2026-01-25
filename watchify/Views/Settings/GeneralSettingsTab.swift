@@ -7,6 +7,8 @@ import SwiftUI
 
 struct GeneralSettingsTab: View {
     @AppStorage("syncIntervalMinutes") private var syncInterval = 30
+    @AppStorage("activityGroupDisplayMode") private var groupDisplayMode: EventGroupDisplayMode = .collapsible
+    @AppStorage("activityGroupingWindowMinutes") private var groupingWindowMinutes = 5
     @State private var useCustom = false
 
     private let presets = [15, 30, 60, 120, 240, 480]
@@ -56,6 +58,28 @@ struct GeneralSettingsTab: View {
                 if useCustom {
                     Text("Valid range: 5-1440 minutes")
                 }
+            }
+
+            Section {
+                Picker("Group display", selection: $groupDisplayMode) {
+                    ForEach(EventGroupDisplayMode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .accessibilityHint("Choose how grouped events are displayed")
+
+                Stepper(
+                    "Group within \(groupingWindowMinutes) min",
+                    value: $groupingWindowMinutes,
+                    in: 1...60
+                )
+                .accessibilityLabel("Grouping time window")
+                .accessibilityValue("\(groupingWindowMinutes) minutes")
+                .accessibilityHint("Events within this time window are grouped together")
+            } header: {
+                Text("Activity Feed")
+            } footer: {
+                Text("Events for the same product within the time window are grouped together.")
             }
         }
         .formStyle(.grouped)

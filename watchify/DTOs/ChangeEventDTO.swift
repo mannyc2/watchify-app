@@ -19,6 +19,12 @@ struct ChangeEventDTO: Sendable, Identifiable, Equatable {
     let isRead: Bool
     let magnitude: ChangeMagnitude
 
+    /// Shopify product ID for navigation. Nil for removed products.
+    let productShopifyId: Int64?
+
+    /// Product image URL for thumbnails. Nil for removed products or products without images.
+    let productImageURL: String?
+
     // Denormalized store fields to avoid N+1 relationship faults
     let storeId: UUID?
     let storeName: String?
@@ -32,6 +38,8 @@ struct ChangeEventDTO: Sendable, Identifiable, Equatable {
         newValue: String? = nil,
         priceChange: Decimal? = nil,
         magnitude: ChangeMagnitude = .small,
+        productShopifyId: Int64? = nil,
+        productImageURL: String? = nil,
         id: UUID = UUID(),
         occurredAt: Date = Date(),
         isRead: Bool = false,
@@ -48,13 +56,16 @@ struct ChangeEventDTO: Sendable, Identifiable, Equatable {
         self.priceChange = priceChange
         self.isRead = isRead
         self.magnitude = magnitude
+        self.productShopifyId = productShopifyId
+        self.productImageURL = productImageURL
         self.storeId = storeId
         self.storeName = storeName
     }
 
     /// Creates a DTO from a ChangeEvent. Must be called on the same actor as the event.
     /// Marked nonisolated to avoid MainActor hop when called from background ModelActor.
-    nonisolated init(from event: ChangeEvent) {
+    /// - Parameter productImageURL: Optional image URL, passed in when batch-fetching events
+    nonisolated init(from event: ChangeEvent, productImageURL: String? = nil) {
         self.id = event.id
         self.occurredAt = event.occurredAt
         self.changeType = event.changeType
@@ -65,6 +76,8 @@ struct ChangeEventDTO: Sendable, Identifiable, Equatable {
         self.priceChange = event.priceChange
         self.isRead = event.isRead
         self.magnitude = event.magnitude
+        self.productShopifyId = event.productShopifyId
+        self.productImageURL = productImageURL
         self.storeId = event.store?.id
         self.storeName = event.store?.name
     }

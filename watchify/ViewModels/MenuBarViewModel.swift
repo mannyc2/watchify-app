@@ -63,6 +63,8 @@ final class MenuBarViewModel {
                 priceChange: event.priceChange,
                 isRead: true,
                 magnitude: event.magnitude,
+                productShopifyId: event.productShopifyId,
+                productImageURL: event.productImageURL,
                 storeId: event.storeId,
                 storeName: event.storeName
             )
@@ -91,6 +93,8 @@ final class MenuBarViewModel {
                 priceChange: event.priceChange,
                 isRead: true,
                 magnitude: event.magnitude,
+                productShopifyId: event.productShopifyId,
+                productImageURL: event.productImageURL,
                 storeId: event.storeId,
                 storeName: event.storeName
             )

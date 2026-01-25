@@ -2,9 +2,31 @@
 
 All notable changes to Watchify. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## 2026-01-25
+
+### Added
+- **Event grouping for Activity feed**: Groups related events (same product + store + change category) within a configurable time window
+- Three display modes for grouped events: collapsible sections, summary rows, inline expansion
+- `ActivityGroupRow.swift` with `CollapsibleGroupRow`, `SummaryGroupRow`, `InlineExpandableGroupRow` views
+- New types: `EventGroupDisplayMode`, `ChangeCategory`, `EventGroupKey`, `EventGroup`
+- Settings UI for Activity feed: display mode picker, grouping time window stepper (1-60 min, default 5)
+- `ProductCardVariants.swift`: Design exploration with multiple card styles (ribbon, etc.)
+- `PreviewStores` sample data and `PreviewAssets` for SwiftUI previews
+- Vision saliency cropping in `ImageService` for store hero images
+
+### Changed
+- **StoreCard redesign**: Hero image with floating product count badge, glass info strip with store name + sync time
+- `ActivityListItem` enum extended with `.group(EventGroup, showDivider:)` case
+- `ActivityViewModel` now clusters events by product/store/category and time window
+
+---
+
 ## 2026-01-24
 
 ### Added
+- Vision saliency cropping for store hero images (auto-focuses on interesting region)
+- `ImageServiceTests` for saliency processor
+- `PreviewStores` sample data for SwiftUI previews
 - Page object pattern for UI tests (`SidebarScreen`, `StoreDetailScreen`, `AddStoreScreen`, `SettingsScreen`)
 - UI test files: `SyncTests`, `NavigationTests`, `AddStoreTests`, `DeleteStoreTests`, `SettingsTests`, `ErrorStateTests`
 - Accessibility identifiers for UI testing
@@ -179,4 +201,5 @@ All notable changes to Watchify. Format based on [Keep a Changelog](https://keep
 | 2026-01-21 | Liquid Glass design system |
 | 2026-01-22 | Concurrency fixes, ViewModels, snapshot cleanup, error handling, accessibility |
 | 2026-01-23 | Sync performance, Nuke image loading (326ms hangs → 0ms) |
-| 2026-01-24 | UI test infrastructure, test suite reorganization, notification permission fixes |
+| 2026-01-24 | Vision saliency cropping, preview helpers, UI tests, notification fixes |
+| 2026-01-25 | Activity event grouping (3 display modes), grouping settings |

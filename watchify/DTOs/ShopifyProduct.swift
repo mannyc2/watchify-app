@@ -21,6 +21,8 @@ struct ShopifyProduct: Sendable, Codable {
     let vendor: String?
     let productType: String?
     let createdAt: Date?
+    let publishedAt: Date?
+    let updatedAt: Date?
     let images: [ShopifyImage]
     let variants: [ShopifyVariant]
 
@@ -28,6 +30,8 @@ struct ShopifyProduct: Sendable, Codable {
         case id, title, handle, vendor, images, variants
         case productType = "product_type"
         case createdAt = "created_at"
+        case publishedAt = "published_at"
+        case updatedAt = "updated_at"
     }
 
     nonisolated init(from decoder: Decoder) throws {
@@ -38,6 +42,8 @@ struct ShopifyProduct: Sendable, Codable {
         vendor = try container.decodeIfPresent(String.self, forKey: .vendor)
         productType = try container.decodeIfPresent(String.self, forKey: .productType)
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
+        publishedAt = try container.decodeIfPresent(Date.self, forKey: .publishedAt)
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
         images = try container.decode([ShopifyImage].self, forKey: .images)
         variants = try container.decode([ShopifyVariant].self, forKey: .variants)
     }
@@ -49,6 +55,8 @@ struct ShopifyProduct: Sendable, Codable {
         vendor: String?,
         productType: String?,
         createdAt: Date? = nil,
+        publishedAt: Date? = nil,
+        updatedAt: Date? = nil,
         images: [ShopifyImage],
         variants: [ShopifyVariant]
     ) {
@@ -58,6 +66,8 @@ struct ShopifyProduct: Sendable, Codable {
         self.vendor = vendor
         self.productType = productType
         self.createdAt = createdAt
+        self.publishedAt = publishedAt
+        self.updatedAt = updatedAt
         self.images = images
         self.variants = variants
     }
