@@ -65,6 +65,12 @@ struct ContentView: View {
         .focusedSceneValue(\.sidebarSelection, $selection)
         .focusedSceneValue(\.showAddStore, $showingAddStore)
         .focusedSceneValue(\.storeList, viewModel.stores)
+        .frame(
+            minWidth: WatchifyApp.isScreenshotMode ? 1280 : nil,
+            maxWidth: WatchifyApp.isScreenshotMode ? 1280 : .infinity,
+            minHeight: WatchifyApp.isScreenshotMode ? 800 : nil,
+            maxHeight: WatchifyApp.isScreenshotMode ? 800 : .infinity
+        )
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Watchify main window")
     }

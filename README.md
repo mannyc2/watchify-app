@@ -12,6 +12,16 @@ A native macOS app that monitors Shopify stores for price drops, restocks, and n
 - **Keyboard Shortcuts** — Add Store (⌘N), Sync (⌘R), navigate stores (⌘1-9)
 - **VoiceOver Accessible** — Full accessibility support
 
+## Screenshots
+
+![Activity Feed](docs/screenshots/04-activity.png)
+
+| Overview | Store Detail | Product Detail |
+|----------|-------------|----------------|
+| ![Overview](docs/screenshots/01-overview.png) | ![Store Detail](docs/screenshots/02-store-detail.png) | ![Product Detail](docs/screenshots/03-product-detail.png) |
+
+![Demo](docs/screenshots/demo.gif)
+
 ## Requirements
 
 - macOS 26 (Tahoe) or later

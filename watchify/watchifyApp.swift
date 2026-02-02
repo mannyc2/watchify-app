@@ -129,6 +129,9 @@ struct WatchifyApp: App {
     /// Whether running in UI test mode (in-memory database)
     static let isUITesting = CommandLine.arguments.contains("-UITesting")
 
+    /// Whether running in screenshot capture mode (fixed window size)
+    static let isScreenshotMode = CommandLine.arguments.contains("-ScreenshotMode")
+
     init() {
         do {
             // Use in-memory store for UI testing to isolate from real data

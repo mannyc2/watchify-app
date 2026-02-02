@@ -2,6 +2,18 @@
 
 All notable changes to Watchify. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## 2026-02-02
+
+### Added
+- **Programmatic screenshot capture**: `ScreenshotTests` for automated documentation screenshots and GIF frames
+- `GIFGenerator.swift` helper for assembling animated GIF from screenshot frames
+- `-SeedScreenshots` seed data: 3 realistic stores (Allbirds, Gymshark, MVMT) with products, price history, and 15 change events
+- `-ScreenshotMode` launch argument for fixed 1280x800 window size during capture
+- `generate-screenshots.sh` script for running capture and assembling demo GIF
+- README screenshots section with overview, store detail, product detail, activity, and demo GIF
+
+---
+
 ## 2026-01-25
 
 ### Added
@@ -203,3 +215,4 @@ All notable changes to Watchify. Format based on [Keep a Changelog](https://keep
 | 2026-01-23 | Sync performance, Nuke image loading (326ms hangs → 0ms) |
 | 2026-01-24 | Vision saliency cropping, preview helpers, UI tests, notification fixes |
 | 2026-01-25 | Activity event grouping (3 display modes), grouping settings |
+| 2026-02-02 | Programmatic screenshot capture, README screenshots, demo GIF |
